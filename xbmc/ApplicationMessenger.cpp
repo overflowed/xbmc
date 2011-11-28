@@ -42,6 +42,8 @@
 #include "guilib/GUIDialog.h"
 #include "windowing/WindowingFactory.h"
 #include "GUIInfoManager.h"
+#include "utils/Splash.h"
+#include "cores/VideoRenderers/RenderManager.h"
 
 #include "powermanagement/PowerManager.h"
 
@@ -233,11 +235,15 @@ void CApplicationMessenger::ProcessMessage(ThreadMessage *pMsg)
           case POWERSTATE_MINIMIZE:
             Minimize();
             break;
+
+          case TMSG_RENDERER_FLUSH:
+            g_renderManager.Flush();
+            break;
         }
       }
       break;
 
-case TMSG_POWERDOWN:
+    case TMSG_POWERDOWN:
       {
         g_application.Stop(EXITCODE_POWERDOWN);
         g_powerManager.Powerdown();
@@ -279,6 +285,12 @@ case TMSG_POWERDOWN:
       }
       break;
 
+    case TMSG_INHIBITIDLESHUTDOWN:
+      {
+        g_application.InhibitIdleShutdown((bool)pMsg->dwParam1);
+      }
+      break;
+
     case TMSG_MEDIA_PLAY:
       {
         // first check if we were called from the PlayFile() function
@@ -316,20 +328,27 @@ case TMSG_POWERDOWN:
               }
             }
 
+            g_playlistPlayer.ClearPlaylist(playlist);
+            g_playlistPlayer.SetCurrentPlaylist(playlist);
             //For single item lists try PlayMedia. This covers some more cases where a playlist is not appropriate
             //It will fall through to PlayFile
             if (list->Size() == 1 && !(*list)[0]->IsPlayList())
               g_application.PlayMedia(*((*list)[0]), playlist);
             else
             {
-              g_playlistPlayer.ClearPlaylist(playlist);
               g_playlistPlayer.Add(playlist, (*list));
-              g_playlistPlayer.SetCurrentPlaylist(playlist);
               g_playlistPlayer.Play(pMsg->dwParam1);
             }
           }
 
           delete list;
+        }
+        else if (pMsg->dwParam1 == PLAYLIST_MUSIC || pMsg->dwParam1 == PLAYLIST_VIDEO)
+        {
+          if (g_playlistPlayer.GetCurrentPlaylist() != (int)pMsg->dwParam1)
+            g_playlistPlayer.SetCurrentPlaylist(pMsg->dwParam1);
+
+          PlayListPlayerPlay(pMsg->dwParam2);
         }
       }
       break;
@@ -759,6 +778,11 @@ case TMSG_POWERDOWN:
         CAction action((int)pMsg->dwParam1);
         g_application.ShowVolumeBar(&action);
       }
+    case TMSG_SPLASH_MESSAGE:
+      {
+        if (g_application.m_splash)
+          g_application.m_splash->Show(pMsg->strParam);
+      }
   }
 }
 
@@ -846,6 +870,15 @@ void CApplicationMessenger::MediaPlay(const CFileItemList &list, int song)
   tMsg.lpVoid = (void*)listcopy;
   tMsg.dwParam1 = song;
   tMsg.dwParam2 = 1;
+  SendMessage(tMsg, true);
+}
+
+void CApplicationMessenger::MediaPlay(int playlistid, int song /* = -1 */)
+{
+  ThreadMessage tMsg = {TMSG_MEDIA_PLAY};
+  tMsg.lpVoid = NULL;
+  tMsg.dwParam1 = playlistid;
+  tMsg.dwParam2 = song;
   SendMessage(tMsg, true);
 }
 
@@ -1067,6 +1100,12 @@ void CApplicationMessenger::RestartApp()
   SendMessage(tMsg);
 }
 
+void CApplicationMessenger::InhibitIdleShutdown(bool inhibit)
+{
+  ThreadMessage tMsg = {TMSG_INHIBITIDLESHUTDOWN, (DWORD)inhibit};
+  SendMessage(tMsg);
+}
+
 void CApplicationMessenger::NetworkMessage(DWORD dwMessage, DWORD dwParam)
 {
   ThreadMessage tMsg = {TMSG_NETWORKMESSAGE, dwMessage, dwParam};
@@ -1183,4 +1222,16 @@ void CApplicationMessenger::ShowVolumeBar(bool up)
   ThreadMessage tMsg = {TMSG_VOLUME_SHOW};
   tMsg.dwParam1 = up ? ACTION_VOLUME_UP : ACTION_VOLUME_DOWN;
   SendMessage(tMsg, false);
+}
+
+void CApplicationMessenger::SetSplashMessage(const CStdString& message)
+{
+  ThreadMessage tMsg = {TMSG_SPLASH_MESSAGE};
+  tMsg.strParam = message;
+  SendMessage(tMsg, true);
+}
+
+void CApplicationMessenger::SetSplashMessage(int stringID)
+{
+  SetSplashMessage(g_localizeStrings.Get(stringID));
 }

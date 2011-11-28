@@ -81,11 +81,12 @@ namespace PVR
     CStdString            m_strFileNameAndPath; /*!< @brief filename is only for reference */
     int                   m_iChannelNumber;     /*!< @brief integer value of the channel number */
     bool                  m_bIsRadio;           /*!< @brief is radio channel if set */
-    EPG::CEpgInfoTag *    m_epgInfo;
     const CPVRChannel *   m_channel;
     unsigned int          m_iMarginStart;       /*!< @brief (optional) if set, the backend starts the recording iMarginStart minutes before startTime. */
     unsigned int          m_iMarginEnd;         /*!< @brief (optional) if set, the backend ends the recording iMarginEnd minutes after endTime. */
     CStdString            m_strGenre;           /*!< @brief genre of the timer */
+    int                   m_iGenreType;         /*!< @brief genre type of the timer */
+    int                   m_iGenreSubType;      /*!< @brief genre subtype of the timer */
 
     CPVRTimerInfoTag(void);
     CPVRTimerInfoTag(const PVR_TIMER &timer, CPVRChannel *channel, unsigned int iClientId);
@@ -95,6 +96,8 @@ namespace PVR
 
     bool operator ==(const CPVRTimerInfoTag& right) const;
     bool operator !=(const CPVRTimerInfoTag& right) const;
+    CPVRTimerInfoTag &operator=(const CPVRTimerInfoTag &orig);
+
     int Compare(const CPVRTimerInfoTag &timer) const;
 
     void UpdateSummary(void);
@@ -107,6 +110,7 @@ namespace PVR
 
     static CPVRTimerInfoTag *CreateFromEpg(const EPG::CEpgInfoTag &tag);
     void SetEpgInfoTag(EPG::CEpgInfoTag *tag);
+    EPG::CEpgInfoTag *GetEpgInfoTag(void) const;
 
     int ChannelNumber(void) const;
     CStdString ChannelName(void) const;
@@ -157,9 +161,11 @@ namespace PVR
     bool RenameOnClient(const CStdString &strNewName);
     bool UpdateOnClient();
 
-  private:
-    CDateTime m_StartTime; /* start time */
-    CDateTime m_StopTime;  /* stop time */
-    CDateTime m_FirstDay;  /* if it is a repeating timer the first date it starts */
+  protected:
+    EPG::CEpgInfoTag *    m_epgInfo;
+    CCriticalSection      m_critSection;
+    CDateTime             m_StartTime; /* start time */
+    CDateTime             m_StopTime;  /* stop time */
+    CDateTime             m_FirstDay;  /* if it is a repeating timer the first date it starts */
   };
 }

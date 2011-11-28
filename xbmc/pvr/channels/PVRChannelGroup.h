@@ -209,7 +209,6 @@ namespace PVR
 
     //@}
 
-    virtual void SetSelectedGroup(void);
     virtual void ResetChannelNumbers(void);
 
     virtual void Notify(const Observable &obs, const CStdString& msg);
@@ -304,6 +303,11 @@ namespace PVR
     virtual int GetMembers(CFileItemList &results, bool bGroupMembers = true) const;
 
     /*!
+     * @return The next channel group.
+     */
+    virtual CPVRChannelGroup *GetNextGroup(void) const;
+
+    /*!
      * @brief The amount of hidden channels in this container.
      * @return The amount of hidden channels in this container.
      */
@@ -362,18 +366,6 @@ namespace PVR
      */
     virtual int GetEPGNext(CFileItemList &results);
 
-    /*!
-     * @brief Get the start time of the first entry.
-     * @return The start time.
-     */
-    virtual const CDateTime GetFirstEPGDate(void);
-
-    /*!
-      * @brief Get the end time of the last entry.
-      * @return The end time.
-      */
-    virtual const CDateTime GetLastEPGDate(void);
-
   protected:
     /*!
      * @brief Load the channels stored in the database.
@@ -423,6 +415,14 @@ namespace PVR
      * @return True if something changed, false otherwise.
      */
     virtual bool Renumber(void);
+
+    /*!
+     * @brief Get the previous or next channel in this group.
+     * @param channel The current channel.
+     * @param bChannelUp True to get the next channel, false to get the previous one.
+     * @return The requested channel or NULL if there is none.
+     */
+    virtual const CPVRChannel *GetByChannelUpDown(const CPVRChannel &channel, bool bChannelUp) const;
 
     bool             m_bRadio;                      /*!< true if this container holds radio channels, false if it holds TV channels */
     int              m_iGroupId;                    /*!< The ID of this group in the database */

@@ -89,9 +89,8 @@ void CPVRClient::ResetAddonCapabilities(void)
   m_addonCapabilities.bHandlesDemuxing         = false;
 }
 
-bool CPVRClient::Create(int iClientId)
+void CPVRClient::Create(int iClientId)
 {
-  bool bReturn(false);
   CLog::Log(LOGDEBUG, "PVR - %s - creating PVR add-on instance '%s'", __FUNCTION__, Name().c_str());
 
   /* initialise members */
@@ -106,14 +105,11 @@ bool CPVRClient::Create(int iClientId)
   /* initialise the add-on */
   if (CAddonDll<DllPVRClient, PVRClient, PVR_PROPERTIES>::Create())
   {
+    SetAddonCapabilities();
     m_strHostName = m_pStruct->GetConnectionString();
     m_bReadyToUse = true;
-    bReturn       = true;
-    SetAddonCapabilities();
   }
   /* don't log failed inits here because it will spam the log file as this is called in a loop */
-
-  return bReturn;
 }
 
 void CPVRClient::Destroy(void)
@@ -135,11 +131,11 @@ void CPVRClient::Destroy(void)
   }
 }
 
-bool CPVRClient::ReCreate(void)
+void CPVRClient::ReCreate(void)
 {
   int clientID = m_pInfo->iClientId;
   Destroy();
-  return Create(clientID);
+  Create(clientID);
 }
 
 bool CPVRClient::ReadyToUse(void) const
@@ -197,6 +193,7 @@ inline void PVRWriteClientTimerInfo(const CPVRTimerInfoTag &xbmcTimer, PVR_TIMER
   xbmcTimer.StartAsUTC().GetAsTime(start);
   xbmcTimer.EndAsUTC().GetAsTime(end);
   xbmcTimer.FirstDayAsUTC().GetAsTime(firstDay);
+  CEpgInfoTag *epgTag = xbmcTimer.GetEpgInfoTag();
 
   addonTimer.iClientIndex      = xbmcTimer.m_iClientIndex;
   addonTimer.state             = xbmcTimer.m_state;
@@ -211,10 +208,12 @@ inline void PVRWriteClientTimerInfo(const CPVRTimerInfoTag &xbmcTimer, PVR_TIMER
   addonTimer.startTime         = start - g_advancedSettings.m_iPVRTimeCorrection;
   addonTimer.endTime           = end - g_advancedSettings.m_iPVRTimeCorrection;
   addonTimer.firstDay          = firstDay - g_advancedSettings.m_iPVRTimeCorrection;
-  addonTimer.iEpgUid           = xbmcTimer.m_epgInfo ? xbmcTimer.m_epgInfo->UniqueBroadcastID() : -1;
+  addonTimer.iEpgUid           = epgTag ? epgTag->UniqueBroadcastID() : -1;
   addonTimer.strSummary        = xbmcTimer.m_strSummary.c_str();
   addonTimer.iMarginStart      = xbmcTimer.m_iMarginStart;
   addonTimer.iMarginEnd        = xbmcTimer.m_iMarginEnd;
+  addonTimer.iGenreType        = xbmcTimer.m_iGenreType;
+  addonTimer.iGenreSubType     = xbmcTimer.m_iGenreSubType;
 }
 
 /*!

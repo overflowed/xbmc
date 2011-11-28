@@ -1006,6 +1006,8 @@
   <string id="13014">Minimize</string>
   <string id="13015">Power button action</string>
   <string id="13016">Power off System</string>
+  <string id="13017">Inhibit idle shutdown</string>
+  <string id="13018">Allow idle shutdown</string>
 
   <string id="13020">Is another session active, perhaps over ssh?</string>
   <string id="13021">Mounted removable harddrive</string>
@@ -1536,8 +1538,8 @@
   <string id="16322">Spline36</string>
   <string id="16323">Spline36 optimized</string>
 
-  <string id="16324">Auto - ION Optimized</string>
-  <string id="16325">Software Blend</string>
+  <string id="16324">Software Blend</string>
+  <string id="16325">Auto - ION Optimized</string>
   
   <string id="16400">Post-processing</string>
 
@@ -1790,7 +1792,13 @@
   <string id="19241">The PVR manager has been enabled without any</string>
   <string id="19242">enabled PVR add-on. Enable at least one add-on</string>
   <string id="19243">in order to use the PVR functionality.</string>
-
+  
+  <string id="19244">Backend idle time</string>  
+  <string id="19245">Set wakup command (cmd [timestamp])</string>
+  <string id="19246">Wakup before recording</string>
+  <string id="19247">Daily wakeup</string>
+  <string id="19248">Daily wakeup time (HH:MM:SS)</string>
+  
   <string id="19499">Other/Unknown</string>
   <string id="19500">Movie/Drama</string>
   <string id="19501">Detective/Thriller</string>
@@ -2364,7 +2372,8 @@
   <string id="21365">Remove media share</string>
   <string id="21366">Subtitle folder</string>
   <string id="21367">Movie &amp; alternate subtitle directory</string>
-
+  <string id="21368">Override ASS/SSA subtitles fonts</string>
+  
   <string id="21369">Enable mouse and Touch Screen support</string>
   <string id="21370">Play navigation sounds during media playback</string>
   <string id="21371">Thumbnail</string>
@@ -2819,7 +2828,7 @@
   <string id="36004">Press "user" button command</string>
   <string id="36005">Enable switch side commands</string>
   <string id="36006">Could not open the adapter</string>
-  <string id="36007">Power on devices when starting XBMC</string>
+  <string id="36007">Power on the TV when starting XBMC</string>
   <string id="36008">Power off devices when stopping XBMC</string>
   <string id="36009">Put devices in standby mode when activating screensaver</string>
   <string id="36010">Set as inactive source when stopping XBMC</string>
@@ -2828,5 +2837,7 @@
   <string id="36013">Unsupported libcec interface version. %d is greater than the version XBMC supports (%d)</string>
   <string id="36014">Put this PC in standby mode when the TV is switched off</string>
   <string id="36015">HDMI port number</string>
-  <string id="36016">XBMC connected</string>
+  <string id="36016">Connected</string> <!-- max. 13 characters -->
+  <string id="36017">Adapter found, but libcec is not available</string>
+  <string id="36018">Use the TV's language setting</string>
 </strings>

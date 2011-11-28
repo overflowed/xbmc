@@ -67,6 +67,7 @@
 #include "utils/URIUtils.h"
 #include "GUIUserMessages.h"
 #include "addons/Skin.h"
+#include "storage/MediaManager.h"
 
 using namespace std;
 using namespace XFILE;
@@ -143,11 +144,13 @@ bool CGUIWindowVideoBase::OnMessage(CGUIMessage& message)
         UpdateButtons();
         Update( m_vecItems->GetPath() );
       }
+#if defined(HAS_DVD_DRIVE)
       else if (iControl == CONTROL_PLAY_DVD)
       {
         // play movie...
-        CUtil::PlayDVD();
+        MEDIA_DETECT::CAutorun::PlayDiscAskResume(g_mediaManager.TranslateDevicePath(""));
       }
+#endif
       else if (iControl == CONTROL_BTNTYPE)
       {
         CGUIMessage msg(GUI_MSG_ITEM_SELECTED, GetID(), CONTROL_BTNTYPE);
@@ -726,6 +729,7 @@ void CGUIWindowVideoBase::OnQueueItem(int iItem)
   }
 
   g_playlistPlayer.Add(PLAYLIST_VIDEO, queuedItems);
+  g_playlistPlayer.SetCurrentPlaylist(PLAYLIST_VIDEO);
   // video does not auto play on queue like music
   m_viewControl.SetSelectedItem(iItem + 1);
 }

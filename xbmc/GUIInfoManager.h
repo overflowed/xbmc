@@ -144,7 +144,7 @@ namespace INFO
 #define SYSTEM_HASLOCKS             140
 #define SYSTEM_ISMASTER             141
 #define SYSTEM_TRAYOPEN             142
-#define SYSTEM_SHOW_EXIT_BUTTON		143
+#define SYSTEM_SHOW_EXIT_BUTTON     143
 #define SYSTEM_ALARM_POS            144
 #define SYSTEM_LOGGEDON             145
 #define SYSTEM_PROFILENAME          146
@@ -179,6 +179,8 @@ namespace INFO
 #define SYSTEM_PROFILECOUNT         181
 #define SYSTEM_ISFULLSCREEN         182
 #define SYSTEM_ISSTANDALONE         183
+#define SYSTEM_ISINHIBIT            184
+#define SYSTEM_HAS_SHUTDOWN         185
 
 #define NETWORK_IP_ADDRESS          190
 #define NETWORK_MAC_ADDRESS         191
@@ -404,6 +406,9 @@ namespace INFO
 #define SYSTEM_PLATFORM_LINUX       741
 #define SYSTEM_PLATFORM_WINDOWS     742
 #define SYSTEM_PLATFORM_OSX         743
+#define SYSTEM_PLATFORM_DARWIN_OSX  744
+#define SYSTEM_PLATFORM_DARWIN_IOS  745
+#define SYSTEM_PLATFORM_DARWIN_ATV2 746
 
 #define SYSTEM_CAN_POWERDOWN        750
 #define SYSTEM_CAN_SUSPEND          751
@@ -765,9 +770,9 @@ public:
 
   int TranslateSingleString(const CStdString &strCondition);
 
-  int RegisterSkinVariableString(const INFO::CSkinVariableString& info);
-  int TranslateSkinVariableString(const CStdString& name);
-  CStdString GetSkinVariableString(int info, int contextWindow, bool preferImage = false, const CGUIListItem *item=NULL);
+  int RegisterSkinVariableString(const INFO::CSkinVariableString* info);
+  int TranslateSkinVariableString(const CStdString& name, int context);
+  CStdString GetSkinVariableString(int info, bool preferImage = false, const CGUIListItem *item=NULL);
 protected:
   friend class INFO::InfoSingle;
   bool GetBool(int condition, int contextWindow = 0, const CGUIListItem *item=NULL);

@@ -128,6 +128,7 @@ void CEpgContainer::Start(void)
 {
   CSingleLock lock(m_critSection);
 
+  m_bIsInitialising = true;
   m_bStop = false;
   g_guiSettings.RegisterObserver(this);
   LoadSettings();
@@ -140,7 +141,6 @@ void CEpgContainer::Start(void)
 bool CEpgContainer::Stop(void)
 {
   StopThread();
-
   return true;
 }
 
@@ -163,19 +163,21 @@ void CEpgContainer::LoadFromDB(void)
 
 void CEpgContainer::Process(void)
 {
+  bool bLoaded(false);
   time_t iNow       = 0;
   m_iNextEpgUpdate  = 0;
   m_iNextEpgActiveTagCheck = 0;
   CSingleLock lock(m_critSection);
   LoadFromDB();
+  CheckPlayingEvents();
   lock.Leave();
 
   bool bUpdateEpg(true);
   while (!m_bStop && !g_application.m_bStop)
   {
-    CDateTime::GetCurrentDateTime().GetAsTime(iNow);
+    CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(iNow);
     lock.Enter();
-    bUpdateEpg = (iNow >= m_iNextEpgUpdate);
+    bUpdateEpg = (iNow >= m_iNextEpgUpdate || !bLoaded);
     lock.Leave();
 
     /* load or update the EPG */
@@ -189,6 +191,8 @@ void CEpgContainer::Process(void)
     /* check for updated active tag */
     if (!m_bStop)
       CheckPlayingEvents();
+
+    bLoaded = true;
 
     Sleep(1000);
   }
@@ -248,7 +252,7 @@ bool CEpgContainer::UpdateEntry(const CEpg &entry, bool bUpdateDatabase /* = fal
       InsertEpg(epg);
   }
 
-  bReturn = epg ? epg->Update(entry, bUpdateDatabase) : false;
+  bReturn = epg ? epg->UpdateMetadata(entry, bUpdateDatabase) : false;
   m_bPreventUpdates = false;
   CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(m_iNextEpgUpdate);
   lock.Leave();
@@ -457,7 +461,7 @@ bool CEpgContainer::UpdateEPG(bool bShowProgress /* = false */)
   if (!bInterrupted)
   {
     lock.Enter();
-    CDateTime::GetCurrentDateTime().GetAsTime(m_iNextEpgUpdate);
+    CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(m_iNextEpgUpdate);
     m_iNextEpgUpdate += g_advancedSettings.m_iEpgUpdateCheckInterval;
     lock.Leave();
   }
@@ -471,7 +475,7 @@ bool CEpgContainer::UpdateEPG(bool bShowProgress /* = false */)
   {
     /* the update has been interrupted. try again later */
     time_t iNow;
-    CDateTime::GetCurrentDateTime().GetAsTime(iNow);
+    CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(iNow);
     m_iNextEpgUpdate = iNow + g_advancedSettings.m_iEpgRetryInterruptedUpdateInterval;
   }
   lock.Leave();

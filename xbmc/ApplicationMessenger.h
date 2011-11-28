@@ -76,6 +76,8 @@ class CGUIWindow;
 #define TMSG_MINIMIZE             309
 #define TMSG_TOGGLEFULLSCREEN     310
 #define TMSG_SETLANGUAGE          311
+#define TMSG_RENDERER_FLUSH       312
+#define TMSG_INHIBITIDLESHUTDOWN  313
 
 #define TMSG_HTTPAPI              400
 
@@ -97,6 +99,7 @@ class CGUIWindow;
 #define TMSG_CALLBACK             800
 
 #define TMSG_VOLUME_SHOW          900
+#define TMSG_SPLASH_MESSAGE       901
 
 typedef struct
 {
@@ -143,6 +146,7 @@ public:
   void MediaPlay(std::string filename);
   void MediaPlay(const CFileItem &item);
   void MediaPlay(const CFileItemList &item, int song = 0);
+  void MediaPlay(int playlistid, int song = -1);
   void MediaStop(bool bWait = true);
   void MediaPause();
   void MediaRestart(bool bWait);
@@ -175,6 +179,7 @@ public:
   void Restart();
   void RestartApp();
   void Reset();
+  void InhibitIdleShutdown(bool inhibit);
   void SwitchToFullscreen(); //
   void Minimize(bool wait = false);
   void ExecOS(const CStdString command, bool waitExit = false);
@@ -199,6 +204,9 @@ public:
   void OpticalUnMount(CStdString device);
 
   void ShowVolumeBar(bool up);
+
+  void SetSplashMessage(const CStdString& message);
+  void SetSplashMessage(int stringID);
 
 private:
   void ProcessMessage(ThreadMessage *pMsg);

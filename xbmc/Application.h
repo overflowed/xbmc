@@ -114,8 +114,6 @@ public:
   bool StartEventServer();
   bool StopEventServer(bool bWait, bool promptuser);
   void RefreshEventServer();
-  void StartDbusServer();
-  bool StopDbusServer(bool bWait);
   void StartZeroconf();
   void StopZeroconf();
   void DimLCDOnPlayback(bool dim);
@@ -140,7 +138,7 @@ public:
   virtual void OnPlayBackSpeedChanged(int iSpeed);
   bool PlayMedia(const CFileItem& item, int iPlaylist = PLAYLIST_MUSIC);
   bool PlayMediaSync(const CFileItem& item, int iPlaylist = PLAYLIST_MUSIC);
-  bool ProcessAndStartPlaylist(const CStdString& strPlayList, PLAYLIST::CPlayList& playlist, int iPlaylist);
+  bool ProcessAndStartPlaylist(const CStdString& strPlayList, PLAYLIST::CPlayList& playlist, int iPlaylist, int track=0);
   bool PlayFile(const CFileItem& item, bool bRestart = false);
   void SaveFileState();
   void UpdateFileState();
@@ -158,6 +156,8 @@ public:
   bool OnAppCommand(const CAction &action);
   bool OnAction(const CAction &action);
   void CheckShutdown();
+  void InhibitIdleShutdown(bool inhibit);
+  bool IsIdleShutdownInhibited() const;
   // Checks whether the screensaver and / or DPMS should become active.
   void CheckScreenSaverAndDPMS();
   void CheckPlayingProgress();
@@ -314,6 +314,8 @@ protected:
   CStopWatch m_slowTimer;
   CStopWatch m_screenSaverTimer;
   CStopWatch m_shutdownTimer;
+
+  bool m_bInhibitIdleShutdown;
 
   DPMSSupport* m_dpms;
   bool m_dpmsIsActive;

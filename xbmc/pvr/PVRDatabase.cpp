@@ -89,10 +89,7 @@ bool CPVRDatabase::CreateTables()
           "idEpg                integer"
         ");"
     );
-    m_pDS->exec("CREATE INDEX idx_channels_iClientId on channels(iClientId);");
-    m_pDS->exec("CREATE INDEX idx_channels_iLastWatched on channels(iLastWatched);");
-    m_pDS->exec("CREATE INDEX idx_channels_bIsRadio on channels(bIsRadio);");
-    m_pDS->exec("CREATE INDEX idx_channels_bIsHidden on channels(bIsHidden);");
+    m_pDS->exec("CREATE UNIQUE INDEX idx_channels_iClientId_iUniqueId on channels(iClientId, iUniqueId);");
 
     // TODO use a mapping table so multiple backends per channel can be implemented
     //    CLog::Log(LOGDEBUG, "PVRDB - %s - creating table 'map_channels_clients'", __FUNCTION__);
@@ -126,8 +123,7 @@ bool CPVRDatabase::CreateTables()
           "iChannelNumber integer"
         ");"
     );
-    m_pDS->exec("CREATE UNIQUE INDEX idx_idChannel_idGroup on map_channelgroups_channels(idChannel, idGroup);");
-    m_pDS->exec("CREATE INDEX idx_idGroup_iChannelNumber on map_channelgroups_channels(idGroup, iChannelNumber);");
+    m_pDS->exec("CREATE UNIQUE INDEX idx_idGroup_idChannel on map_channelgroups_channels(idGroup, idChannel);");
 
     CLog::Log(LOGDEBUG, "PVRDB - %s - creating table 'channelsettings'", __FUNCTION__);
     m_pDS->exec(
@@ -157,7 +153,8 @@ bool CPVRDatabase::CreateTables()
           "fCustomVerticalShift float, "
           "bCustomNonLinStretch bool, "
           "bPostProcess         bool, "
-          "iScalingMethod       integer"
+          "iScalingMethod       integer, "
+          "iDeinterlaceMode     integer "
         ");"
     );
 
@@ -207,6 +204,24 @@ bool CPVRDatabase::UpdateOldVersion(int iVersion)
       if (iVersion < 16)
       {
         /* sqlite apparently can't delete columns from an existing table, so just leave the extra column alone */
+      }
+      if (iVersion < 17)
+      {
+        m_pDS->exec("ALTER TABLE channelsettings ADD iDeinterlaceMode integer");
+        m_pDS->exec("UPDATE channelsettings SET iDeinterlaceMode = 2 WHERE iInterlaceMethod NOT IN (0,1)"); // anything other than none: method auto => mode force
+        m_pDS->exec("UPDATE channelsettings SET iDeinterlaceMode = 1 WHERE iInterlaceMethod = 1"); // method auto => mode auto
+        m_pDS->exec("UPDATE channelsettings SET iDeinterlaceMode = 0, iInterlaceMethod = 1 WHERE iInterlaceMethod = 0"); // method none => mode off, method auto
+      }
+      if (iVersion < 18)
+      {
+        m_pDS->exec("DROP INDEX idx_channels_iClientId;");
+        m_pDS->exec("DROP INDEX idx_channels_iLastWatched;");
+        m_pDS->exec("DROP INDEX idx_channels_bIsRadio;");
+        m_pDS->exec("DROP INDEX idx_channels_bIsHidden;");
+        m_pDS->exec("DROP INDEX idx_idChannel_idGroup;");
+        m_pDS->exec("DROP INDEX idx_idGroup_iChannelNumber;");
+        m_pDS->exec("CREATE UNIQUE INDEX idx_channels_iClientId_iUniqueId on channels(iClientId, iUniqueId);");
+        m_pDS->exec("CREATE UNIQUE INDEX idx_idGroup_idChannel on map_channelgroups_channels(idGroup, idChannel);");
       }
     }
   }
@@ -323,8 +338,7 @@ int CPVRDatabase::Get(CPVRChannelGroupInternal &results)
       "channels.iClientChannelNumber, channels.sInputFormat, channels.sInputFormat, channels.sStreamURL, channels.iEncryptionSystem, map_channelgroups_channels.iChannelNumber, channels.idEpg "
       "FROM map_channelgroups_channels "
       "LEFT JOIN channels ON channels.idChannel = map_channelgroups_channels.idChannel "
-      "WHERE map_channelgroups_channels.idGroup = %u "
-      "ORDER BY map_channelgroups_channels.iChannelNumber ASC", results.IsRadio() ? XBMC_INTERNAL_GROUP_RADIO : XBMC_INTERNAL_GROUP_TV);
+      "WHERE map_channelgroups_channels.idGroup = %u", results.IsRadio() ? XBMC_INTERNAL_GROUP_RADIO : XBMC_INTERNAL_GROUP_TV);
   if (ResultQuery(strQuery))
   {
     try
@@ -352,7 +366,10 @@ int CPVRDatabase::Get(CPVRChannelGroupInternal &results)
 
         CLog::Log(LOGDEBUG, "PVRDB - %s - channel '%s' loaded from the database",
             __FUNCTION__, channel->m_strChannelName.c_str());
-        results.InsertInGroup(*channel, m_pDS->fv("iChannelNumber").get_asInt(), false);
+
+        PVRChannelGroupMember newMember = { channel, m_pDS->fv("iChannelNumber").get_asInt() };
+        results.push_back(newMember);
+
         m_pDS->next();
         ++iReturn;
       }
@@ -432,6 +449,7 @@ bool CPVRDatabase::GetChannelSettings(const CPVRChannel &channel, CVideoSettings
         settings.m_CropTop              = m_pDS->fv("iCropTop").get_asInt();
         settings.m_CropBottom           = m_pDS->fv("iCropBottom").get_asInt();
         settings.m_InterlaceMethod      = (EINTERLACEMETHOD)m_pDS->fv("iInterlaceMethod").get_asInt();
+        settings.m_DeinterlaceMode      = (EDEINTERLACEMODE)m_pDS->fv("iDeinterlaceMode").get_asInt();
         settings.m_VolumeAmplification  = m_pDS->fv("fVolumeAmplification").get_asFloat();
         settings.m_OutputToAllSpeakers  = m_pDS->fv("bOutputToAllSpeakers").get_asBool();
         settings.m_ScalingMethod        = (ESCALINGMETHOD)m_pDS->fv("iScalingMethod").get_asInt();
@@ -465,14 +483,14 @@ bool CPVRDatabase::PersistChannelSettings(const CPVRChannel &channel, const CVid
       "REPLACE INTO channelsettings "
         "(idChannel, iInterlaceMethod, iViewMode, fCustomZoomAmount, fPixelRatio, iAudioStream, iSubtitleStream, fSubtitleDelay, "
          "bSubtitles, fBrightness, fContrast, fGamma, fVolumeAmplification, fAudioDelay, bOutputToAllSpeakers, bCrop, iCropLeft, "
-         "iCropRight, iCropTop, iCropBottom, fSharpness, fNoiseReduction, fCustomVerticalShift, bCustomNonLinStretch, bPostProcess, iScalingMethod) VALUES "
-         "(%i, %i, %i, %f, %f, %i, %i, %f, %i, %f, %f, %f, %f, %f, %i, %i, %i, %i, %i, %i, %f, %f, %f, %i, %i, %i);",
+         "iCropRight, iCropTop, iCropBottom, fSharpness, fNoiseReduction, fCustomVerticalShift, bCustomNonLinStretch, bPostProcess, iScalingMethod, iDeinterlaceMode) VALUES "
+         "(%i, %i, %i, %f, %f, %i, %i, %f, %i, %f, %f, %f, %f, %f, %i, %i, %i, %i, %i, %i, %f, %f, %f, %i, %i, %i, %i);",
        channel.ChannelID(), settings.m_InterlaceMethod, settings.m_ViewMode, settings.m_CustomZoomAmount, settings.m_CustomPixelRatio,
        settings.m_AudioStream, settings.m_SubtitleStream, settings.m_SubtitleDelay, settings.m_SubtitleOn ? 1 :0,
        settings.m_Brightness, settings.m_Contrast, settings.m_Gamma, settings.m_VolumeAmplification, settings.m_AudioDelay,
        settings.m_OutputToAllSpeakers ? 1 : 0, settings.m_Crop ? 1 : 0, settings.m_CropLeft, settings.m_CropRight, settings.m_CropTop,
        settings.m_CropBottom, settings.m_Sharpness, settings.m_NoiseReduction, settings.m_CustomVerticalShift,
-       settings.m_CustomNonLinStretch ? 1 : 0, settings.m_PostProcess ? 1 : 0, settings.m_ScalingMethod);
+       settings.m_CustomNonLinStretch ? 1 : 0, settings.m_PostProcess ? 1 : 0, settings.m_ScalingMethod, settings.m_DeinterlaceMode);
 
   return ExecuteQuery(strQuery);
 }
@@ -597,7 +615,7 @@ bool CPVRDatabase::Delete(const CPVRChannelGroup &group)
 bool CPVRDatabase::Get(CPVRChannelGroups &results)
 {
   bool bReturn = false;
-  CStdString strQuery = FormatSQL("SELECT * from channelgroups WHERE bIsRadio = %u ORDER BY idGroup;", results.IsRadio());
+  CStdString strQuery = FormatSQL("SELECT * from channelgroups WHERE bIsRadio = %u;", results.IsRadio());
 
   if (ResultQuery(strQuery))
   {
@@ -641,7 +659,7 @@ int CPVRDatabase::GetGroupMembers(CPVRChannelGroup &group)
     return -1;
   }
 
-  CStdString strQuery = FormatSQL("SELECT idChannel, iChannelNumber FROM map_channelgroups_channels WHERE idGroup = %u ORDER BY iChannelNumber", group.GroupID());
+  CStdString strQuery = FormatSQL("SELECT idChannel, iChannelNumber FROM map_channelgroups_channels WHERE idGroup = %u", group.GroupID());
   if (ResultQuery(strQuery))
   {
     iReturn = 0;
