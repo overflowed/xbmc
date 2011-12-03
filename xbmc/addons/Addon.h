@@ -185,14 +185,6 @@ protected:
   const AddonPtr Parent() const { return m_parent; }
   virtual void BuildLibName(const cp_extension_t *ext = NULL);
 
-<<<<<<< HEAD
-  /*! \brief Load the default settings and override these with any previously configured user settings
-   \param bForce force the load of settings even if they are already loaded (reload)
-   \return true if settings exist, false otherwise
-   \sa LoadUserSettings, SaveSettings, HasSettings, HasUserSettings, GetSetting, UpdateSetting
-   */
-
->>>>>>> upstream-ro/master
   /*! \brief Load the user settings
    \return true if user settings exist, false otherwise
    \sa LoadSettings, SaveSettings, HasSettings, HasUserSettings, GetSetting, UpdateSetting
