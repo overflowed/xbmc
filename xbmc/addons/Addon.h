@@ -136,12 +136,6 @@ public:
    */
   virtual CStdString GetSetting(const CStdString& key);
 
-  /*! \brief Load the default settings and override these with any previously configured user settings
-   \return true if settings exist, false otherwise
-   \sa LoadUserSettings, SaveSettings, HasSettings, HasUserSettings, GetSetting, UpdateSetting
-   */
-  virtual bool LoadSettings(bool bForce = false);
-
   TiXmlElement* GetSettingsXML();
   virtual CStdString GetString(uint32_t id);
 

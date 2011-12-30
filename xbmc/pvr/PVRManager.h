@@ -189,7 +189,7 @@ namespace PVR
      * @param channel The channel or NULL if none is playing.
      * @return True if a channel is playing, false otherwise.
      */
-    bool GetCurrentChannel(CPVRChannel *channel) const;
+    bool GetCurrentChannel(CPVRChannel &channel) const;
 
     /*!
      * @brief Return the EPG for the channel that is currently playing.
@@ -454,34 +454,9 @@ namespace PVR
     void UpdateChannelGroups(void);
 
     /*!
-     * @see CPVRGUIInfo
-     */
-    //!{
-    const char *CharInfoNowRecordingTitle(void);
-    const char *CharInfoNowRecordingChannel(void);
-    const char *CharInfoNowRecordingChannelIcon(void);
-    const char *CharInfoNowRecordingDateTime(void);
-    const char *CharInfoNextRecordingTitle(void);
-    const char *CharInfoNextRecordingChannel(void);
-    const char *CharInfoNextRecordingChannelIcon(void);
-    const char *CharInfoNextRecordingDateTime(void);
-    const char *CharInfoNextTimer(void);
-    const char *CharInfoPlayingDuration(void);
-    const char *CharInfoPlayingTime(void);
-    //!}
-
-    /*!
      * @brief Reset all properties.
      */
     void ResetProperties(void);
-
-    /*!
-     * @brief Switch to the given channel.
-     * @param channel The new channel.
-     * @param bPreview Don't reset quality data if true.
-     * @return True if the switch was successful, false otherwise.
-     */
-    bool PerformChannelSwitch(const CPVRChannel *channel, bool bPreview);
 
     /*!
      * @brief Called by ChannelUp() and ChannelDown() to perform a channel switch.
@@ -531,6 +506,7 @@ namespace PVR
 
     ManagerState GetState(void) const;
 
+    void SetState(ManagerState state);
     /** @name containers */
     //@{
     CPVRChannelGroupsContainer *    m_channelGroups;               /*!< pointer to the channel groups container */
