@@ -137,6 +137,7 @@ protected:
   bool CreateSurfaces();
   bool OpenProcessor();
   bool SelectProcessor();
+  void EvaluateQuirkNoDeintProcForProg();
 
   IDirectXVideoProcessorService* m_service;
   IDirectXVideoProcessor*        m_process;
@@ -154,7 +155,6 @@ protected:
   unsigned         m_max_back_refs;
   unsigned         m_max_fwd_refs;
   EDEINTERLACEMODE m_deinterlace_mode;
-  EINTERLACEMETHOD m_interlace_methodGUI;
   EINTERLACEMETHOD m_interlace_method;
   bool             m_progressive; // true for progressive source or to force ignoring interlacing flags.
   unsigned         m_index;
@@ -172,6 +172,8 @@ protected:
 
   LPDIRECT3DSURFACE9* m_surfaces;
   CSurfaceContext* m_context;
+
+  bool             m_quirk_nodeintprocforprog;
 };
 
 };

@@ -44,6 +44,8 @@ namespace PVR
 
     CPVRChannelGroupInternal(const CPVRChannelGroup &group);
 
+    virtual ~CPVRChannelGroupInternal(void);
+
     /**
      * @brief The amount of channels in this container.
      * @return The amount of channels in this container.
@@ -55,12 +57,6 @@ namespace PVR
      * @return True if the channel number were updated, false otherwise.
      */
     virtual bool UpdateTimers(void);
-
-    /*!
-     * @brief Persist changed or new data.
-     * @return True if the channel was persisted, false otherwise.
-     */
-    virtual bool Persist(void);
 
     /*!
      * @brief Add or update a channel in this table.

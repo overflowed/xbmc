@@ -61,6 +61,7 @@ CPVRChannel::CPVRChannel(bool bRadio /* = false */)
   m_iChannelId              = -1;
   m_bIsRadio                = bRadio;
   m_bIsHidden               = false;
+  m_bIsUserSetIcon          = false;
   m_strIconPath             = StringUtils::EmptyString;
   m_strChannelName          = StringUtils::EmptyString;
   m_bIsVirtual              = false;
@@ -88,6 +89,7 @@ CPVRChannel::CPVRChannel(const PVR_CHANNEL &channel, unsigned int iClientId)
   m_iChannelId              = -1;
   m_bIsRadio                = channel.bIsRadio;
   m_bIsHidden               = channel.bIsHidden;
+  m_bIsUserSetIcon          = false;
   m_strIconPath             = channel.strIconPath;
   m_strChannelName          = channel.strChannelName;
   m_iUniqueId               = channel.iUniqueId;
@@ -123,6 +125,7 @@ CPVRChannel &CPVRChannel::operator=(const CPVRChannel &channel)
   m_iChannelId              = channel.m_iChannelId;
   m_bIsRadio                = channel.m_bIsRadio;
   m_bIsHidden               = channel.m_bIsHidden;
+  m_bIsUserSetIcon          = channel.m_bIsUserSetIcon;
   m_strIconPath             = channel.m_strIconPath;
   m_strChannelName          = channel.m_strChannelName;
   m_bIsVirtual              = channel.m_bIsVirtual;
@@ -152,7 +155,7 @@ CPVRChannel &CPVRChannel::operator=(const CPVRChannel &channel)
 bool CPVRChannel::Delete(void)
 {
   bool bReturn = false;
-  CPVRDatabase *database = OpenPVRDatabase();
+  CPVRDatabase *database = GetPVRDatabase();
   if (!database)
     return bReturn;
 
@@ -166,7 +169,6 @@ bool CPVRChannel::Delete(void)
   }
 
   bReturn = database->Delete(*this);
-  database->Close();
   return bReturn;
 }
 
@@ -176,7 +178,7 @@ CEpg *CPVRChannel::GetEPG(void) const
   {
     CSingleLock lock(m_critSection);
     if (!m_bIsHidden && m_bEPGEnabled && m_iEpgId > 0)
-      epg = g_EpgContainer.GetByChannel(*this);
+      epg = g_EpgContainer.GetById(m_iEpgId);
   }
   return epg;
 }
@@ -193,8 +195,8 @@ bool CPVRChannel::UpdateFromClient(const CPVRChannel &channel)
   CSingleLock lock(m_critSection);
   if (m_strChannelName.IsEmpty())
     SetChannelName(channel.ClientChannelName());
-  if (m_strIconPath.IsEmpty())
-    SetIconPath(channel.IconPath());
+  if (m_strIconPath.IsEmpty()||(!m_strIconPath.Equals(channel.IconPath()) && !IsUserSetIcon()))
+    SetIconPath(channel.IconPath(), false, false);
 
   return m_bChanged;
 }
@@ -206,19 +208,17 @@ bool CPVRChannel::Persist(bool bQueueWrite /* = false */)
   if (!m_bChanged && m_iChannelId > 0)
     return bReturn;
 
-  if (CPVRDatabase *database = OpenPVRDatabase())
+  if (CPVRDatabase *database = GetPVRDatabase())
   {
     if (!bQueueWrite)
     {
-      m_iChannelId = database->Persist(*this, false);
-      m_bChanged = false;
-      bReturn = m_iChannelId > 0;
+      bReturn = database->Persist(*this, false);
+      m_bChanged = !bReturn;
     }
     else
     {
-      bReturn = database->Persist(*this, true) > 0;
+      bReturn = database->Persist(*this, true);
     }
-    database->Close();
   }
   else
   {
@@ -283,13 +283,13 @@ bool CPVRChannel::IsRecording(void) const
   return g_PVRTimers->IsRecordingOnChannel(*this);
 }
 
-bool CPVRChannel::SetIconPath(const CStdString &strIconPath, bool bSaveInDb /* = false */)
+bool CPVRChannel::SetIconPath(const CStdString &strIconPath, bool bSaveInDb /* = false */, bool bIsUserSetIcon /* = true */)
 {
   bool bReturn(true); // different from the behaviour of the rest of this class
   CSingleLock lock(m_critSection);
 
   /* check if the path is valid */
-  if (!CFile::Exists(strIconPath))
+  if (!CFile::Exists(strIconPath) && !strIconPath.IsEmpty())
     return false;
 
   if (m_strIconPath != strIconPath)
@@ -299,6 +299,16 @@ bool CPVRChannel::SetIconPath(const CStdString &strIconPath, bool bSaveInDb /* =
     SetChanged();
     m_bChanged = true;
 
+    /* did the user change the icon? */
+    if (bIsUserSetIcon) {
+      if (!m_strIconPath.IsEmpty()) {
+        m_bIsUserSetIcon = true;
+      }
+      else {
+        m_bIsUserSetIcon = false;
+      }
+    }
+	  
     /* persist the changes */
     if (bSaveInDb)
       Persist();
@@ -674,7 +684,7 @@ bool CPVRChannel::CreateEPG(bool bForce /* = false */)
   if (!m_bEPGCreated || bForce)
   {
     CEpg epgTmp(this, false);
-    if (g_EpgContainer.UpdateEntry(epgTmp, m_iEpgId <= 0))
+    if (g_EpgContainer.UpdateEntry(epgTmp))
     {
       CEpg *epg = g_EpgContainer.GetByChannel(*this);
       if (epg)

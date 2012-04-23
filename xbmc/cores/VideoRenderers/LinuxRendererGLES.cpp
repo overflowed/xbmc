@@ -102,7 +102,7 @@ CLinuxRendererGLES::YUVBUFFER::~YUVBUFFER()
 
 CLinuxRendererGLES::CLinuxRendererGLES()
 {
-  memset(m_buffers, 0, sizeof(m_buffers));
+  m_textureTarget = GL_TEXTURE_2D;
   for (int i = 0; i < NUM_BUFFERS; i++)
   {
     m_eventTexturesDone[i] = new CEvent(false,true);
@@ -167,10 +167,8 @@ void CLinuxRendererGLES::UnRefBuf(int index)
 CLinuxRendererGLES::~CLinuxRendererGLES()
 {
   UnInit();
-  for (int i = 0; i < NUM_BUFFERS; i++) {
-    UnRefBuf(i);
+  for (int i = 0; i < NUM_BUFFERS; i++)
     delete m_eventTexturesDone[i];
-  }
 
   if (m_rgbBuffer != NULL) {
     delete [] m_rgbBuffer;
@@ -189,7 +187,7 @@ CLinuxRendererGLES::~CLinuxRendererGLES()
 
 void CLinuxRendererGLES::ManageTextures()
 {
-  m_NumYV12Buffers = NUM_BUFFERS;
+  m_NumYV12Buffers = 2;
   //m_iYV12RenderBuffer = 0;
   return;
 }
@@ -325,18 +323,15 @@ void CLinuxRendererGLES::CalculateTextureSourceRects(int source, int num_planes)
   YUVFIELDS& fields =  buf.fields;
 
   // calculate the source rectangle
-  for(int field = 0; field < (buf.eglImageHandle ? 1 : 3); field++)
+  for(int field = 0; field < 3; field++)
   {
     for(int plane = 0; plane < num_planes; plane++)
     {
       YUVPLANE& p = fields[field][plane];
 
-      p.rect.x1 = im->cropX;
-      p.rect.y1 = im->cropY;
-      p.rect.x2 = im->cropX + im->cropWidth;
-      p.rect.y2 = im->cropY + im->cropHeight;
-      p.width   = im->cropWidth;
-      p.height  = im->cropHeight;
+      p.rect = m_sourceRect;
+      p.width  = im->width;
+      p.height = im->height;
 
       if(field != FIELD_FULL)
       {
@@ -367,8 +362,7 @@ void CLinuxRendererGLES::CalculateTextureSourceRects(int source, int num_planes)
         p.rect.y2 /= 1 << im->cshift_y;
       }
 
-      if ((m_textureTarget == GL_TEXTURE_2D) ||
-          (m_textureTarget == GL_TEXTURE_EXTERNAL_OES))
+      if (m_textureTarget == GL_TEXTURE_2D)
       {
         p.height  /= p.texheight;
         p.rect.y1 /= p.texheight;
@@ -389,27 +383,21 @@ void CLinuxRendererGLES::LoadPlane( YUVPLANE& plane, int type, unsigned flipinde
     return;
 
   const GLvoid *pixelData = data;
-  char *pixelVector = NULL;
 
-  // OpenGL ES does not support strided texture input. Make a copy without stride
-  if(stride != width)
-  {
-    pixelVector = (char *)malloc(width * height);
-    
-    const char *src = (const char *)data;
-    char *dst = pixelVector;
-    for (int y = 0;y < height;++y)
-    {
-      fast_memcpy(dst, src, width);
-      src += stride;
-      dst += width;
-    }
-    pixelData = pixelVector;
-    stride = width;
-  }
+  int bps = glFormatElementByteCount(type);
 
   glBindTexture(m_textureTarget, plane.id);
-  glTexSubImage2D(m_textureTarget, 0, 0, 0, width, height, type, GL_UNSIGNED_BYTE, pixelData);
+
+  // OpenGL ES does not support strided texture input.
+  if(stride != width * bps)
+  {
+    unsigned char* src = (unsigned char*)data;
+    for (int y = 0; y < height;++y, src += stride)
+      glTexSubImage2D(m_textureTarget, 0, 0, y, width, 1, type, GL_UNSIGNED_BYTE, src);
+  } else {
+    glTexSubImage2D(m_textureTarget, 0, 0, 0, width, height, type, GL_UNSIGNED_BYTE, pixelData);
+  }
+
 
   /* check if we need to load any border pixels */
   if(height < plane.texheight)
@@ -422,14 +410,11 @@ void CLinuxRendererGLES::LoadPlane( YUVPLANE& plane, int type, unsigned flipinde
     glTexSubImage2D( m_textureTarget, 0
                    , width, 0, 1, height
                    , type, GL_UNSIGNED_BYTE
-                   , (unsigned char*)pixelData + stride - 1);
+                   , (unsigned char*)pixelData + bps * (width-1));
 
   glBindTexture(m_textureTarget, 0);
 
   plane.flipindex = flipindex;
-
-  if(pixelVector)
-    free(pixelVector);
 }
 
 void CLinuxRendererGLES::Reset()
@@ -489,15 +474,10 @@ void CLinuxRendererGLES::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
 
   if (CONF_FLAGS_FORMAT_MASK(m_iFlags) != CONF_FLAGS_FORMAT_OMXEGL)
   {
-    if (!buf.fields[FIELD_FULL][0].id)
-{printf("fail 1\n");
-      return;
-}
+    if (!buf.fields[FIELD_FULL][0].id) return;
   }
   if (buf.image.flags==0)
-{printf("fail 2\n");
     return;
-}
 
   ManageDisplay();
   ManageTextures();
@@ -576,7 +556,7 @@ unsigned int CLinuxRendererGLES::PreInit()
     m_resolution = RES_DESKTOP;
 
   m_iYV12RenderBuffer = 0;
-  m_NumYV12Buffers = NUM_BUFFERS;
+  m_NumYV12Buffers = 2;
 
   // setup the background colour
   m_clearColour = (float)(g_advancedSettings.m_videoBlackBarColour & 0xff) / 0xff;
@@ -653,6 +633,9 @@ void CLinuxRendererGLES::UpdateVideoFilter()
 
 void CLinuxRendererGLES::LoadShaders(int field)
 {
+#ifdef TARGET_DARWIN_IOS
+  float ios_version = GetIOSVersion();
+#endif
   int requestedMethod = g_guiSettings.GetInt("videoplayer.rendermethod");
   CLog::Log(LOGDEBUG, "GL: Requested render method: %d", requestedMethod);
 
@@ -685,8 +668,8 @@ void CLinuxRendererGLES::LoadShaders(int field)
         m_renderMethod = RENDER_CVREF;
         break;
       }
-      #if defined(__APPLE__) && defined(__arm__)
-      else if (CONF_FLAGS_FORMAT_MASK(m_iFlags) == CONF_FLAGS_FORMAT_YV12)
+      #if defined(TARGET_DARWIN_IOS)
+      else if (ios_version < 5.0 && CONF_FLAGS_FORMAT_MASK(m_iFlags) == CONF_FLAGS_FORMAT_YV12)
       {
         CLog::Log(LOGNOTICE, "GL: Using software color conversion/RGBA render method");
         m_renderMethod = RENDER_SW;
@@ -696,17 +679,9 @@ void CLinuxRendererGLES::LoadShaders(int field)
       // Try GLSL shaders if supported and user requested auto or GLSL.
       if (glCreateProgram)
       {
-        if (CONF_FLAGS_FORMAT_MASK(m_iFlags) == CONF_FLAGS_FORMAT_EGLIMG)
-        {
-          m_pYUVShader = new EGLImageExternalShader();
-          CLog::Log(LOGNOTICE, "GL: Selecting eglImage shader");
-        }
-        else
-        {
-          // create regular progressive scan shader
-          m_pYUVShader = new YUV2RGBProgressiveShader(false, m_iFlags);
-          CLog::Log(LOGNOTICE, "GL: Selecting Single Pass YUV 2 RGB shader");
-        }
+        // create regular progressive scan shader
+        m_pYUVShader = new YUV2RGBProgressiveShader(false, m_iFlags);
+        CLog::Log(LOGNOTICE, "GL: Selecting Single Pass YUV 2 RGB shader");
 
         if (m_pYUVShader && m_pYUVShader->CompileAndLink())
         {
@@ -857,9 +832,8 @@ void CLinuxRendererGLES::Render(DWORD flags, int index)
 
 void CLinuxRendererGLES::RenderSinglePass(int index, int field)
 {
-  YUVBUFFER &buf    = m_buffers[index];
-  YV12Image &im     = buf.image;
-  YUVFIELDS &fields = buf.fields;
+  YV12Image &im     = m_buffers[index].image;
+  YUVFIELDS &fields = m_buffers[index].fields;
   YUVPLANES &planes = fields[field];
 
   DBG("render %d: %f", index, buf.pts);
@@ -912,7 +886,7 @@ void CLinuxRendererGLES::RenderSinglePass(int index, int field)
   if (!m_pYUVShader->Enable())
     printf("FAAAAAIIIILLLL!!\n");
 
-  const GLubyte idx[4] = {0, 1, 3, 2};        //determines order of triangle strip
+  GLubyte idx[4] = {0, 1, 3, 2};        //determines order of triangle strip
   GLfloat m_vert[4][3];
   GLfloat m_tex[3][4][2];
 
@@ -984,9 +958,6 @@ void CLinuxRendererGLES::RenderSinglePass(int index, int field)
 
 void CLinuxRendererGLES::RenderMultiPass(int index, int field)
 {
-// XXX for debugging
-abort();
-
   // TODO: Multipass rendering does not currently work! FIX!
   CLog::Log(LOGERROR, "GLES: MULTIPASS rendering was called! But it doesnt work!!!");
   return;
@@ -1566,17 +1537,17 @@ void CLinuxRendererGLES::UploadYV12Texture(int source)
     {
       LoadPlane( fields[FIELD_TOP][0] , GL_RGBA, buf.flipindex
                , im->width, im->height >> 1
-               , m_sourceWidth*2, m_rgbBuffer );
+               , m_sourceWidth*8, m_rgbBuffer );
 
       LoadPlane( fields[FIELD_BOT][0], GL_RGBA, buf.flipindex
                , im->width, im->height >> 1
-               , m_sourceWidth*2, m_rgbBuffer + m_sourceWidth*4);      
+               , m_sourceWidth*8, m_rgbBuffer + m_sourceWidth*4);      
     }
     else
     {
       LoadPlane( fields[FIELD_FULL][0], GL_RGBA, buf.flipindex
                , im->width, im->height
-               , m_sourceWidth, m_rgbBuffer );
+               , m_sourceWidth*4, m_rgbBuffer );
     }
   }
   else
@@ -1751,7 +1722,7 @@ bool CLinuxRendererGLES::CreateYV12Texture(int index)
       }
     }
 
-    for(int p = 0; p < MAX_PLANES; p++)
+    for(int p = 0; p < 3; p++)
     {
       YUVPLANE &plane = planes[p];
       if (plane.texwidth * plane.texheight == 0)

@@ -293,7 +293,7 @@ int CEpgDatabase::Get(CEpg &epg)
         newTag.m_strPlot            = m_pDS->fv("sPlot").get_asString().c_str();
         newTag.m_iGenreType         = m_pDS->fv("iGenreType").get_asInt();
         newTag.m_iGenreSubType      = m_pDS->fv("iGenreSubType").get_asInt();
-        newTag.m_strGenre           = m_pDS->fv("sGenre").get_asString().c_str();
+        newTag.m_genre              = StringUtils::Split(m_pDS->fv("sGenre").get_asString().c_str(), g_advancedSettings.m_videoItemSeparator);
         newTag.m_iParentalRating    = m_pDS->fv("iParentalRating").get_asInt();
         newTag.m_iStarRating        = m_pDS->fv("iStarRating").get_asInt();
         newTag.m_bNotify            = m_pDS->fv("bNotify").get_asBool();
@@ -346,6 +346,18 @@ bool CEpgDatabase::PersistLastEpgScanTime(int iEpgId /* = 0 */, bool bQueueWrite
   return bQueueWrite ? QueueInsertQuery(strQuery) : ExecuteQuery(strQuery);
 }
 
+bool CEpgDatabase::Persist(const CEpgContainer &epg)
+{
+  for (map<unsigned int, CEpg *>::const_iterator it = epg.m_epgs.begin(); it != epg.m_epgs.end(); it++)
+  {
+    CEpg *epg = it->second;
+    if (epg)
+      Persist(*epg, true);
+  }
+
+  return CommitInsertQueries();
+}
+
 int CEpgDatabase::Persist(const CEpg &epg, bool bQueueWrite /* = false */)
 {
   int iReturn(-1);
@@ -377,8 +389,7 @@ int CEpgDatabase::Persist(const CEpgInfoTag &tag, bool bSingleUpdate /* = true *
 {
   int iReturn(-1);
 
-  const CEpg *epg = tag.GetTable();
-  if (!epg || epg->EpgID() <= 0)
+  if (tag.EpgID() <= 0)
   {
     CLog::Log(LOGERROR, "%s - tag '%s' does not have a valid table", __FUNCTION__, tag.Title().c_str());
     return iReturn;
@@ -388,19 +399,13 @@ int CEpgDatabase::Persist(const CEpgInfoTag &tag, bool bSingleUpdate /* = true *
   tag.StartAsUTC().GetAsTime(iStartTime);
   tag.EndAsUTC().GetAsTime(iEndTime);
   tag.FirstAiredAsUTC().GetAsTime(iFirstAired);
-  int iEpgId = epg->EpgID();
-
-  if (bSingleUpdate)
-  {
-    Delete(*tag.GetTable(), iStartTime, iEndTime);
-  }
 
   int iBroadcastId = tag.BroadcastId();
   CSingleLock lock(m_critSection);
   CStdString strQuery;
   
   /* Only store the genre string when needed */
-  CStdString strGenre = (tag.GenreType() == EPG_GENRE_USE_STRING) ? tag.Genre() : "";
+  CStdString strGenre = (tag.GenreType() == EPG_GENRE_USE_STRING) ? StringUtils::Join(tag.Genre(), g_advancedSettings.m_videoItemSeparator) : "";
 
   if (iBroadcastId < 0)
   {
@@ -409,7 +414,7 @@ int CEpgDatabase::Persist(const CEpgInfoTag &tag, bool bSingleUpdate /* = true *
         "iFirstAired, iParentalRating, iStarRating, bNotify, iSeriesId, "
         "iEpisodeId, iEpisodePart, sEpisodeName, iBroadcastUid) "
         "VALUES (%u, %u, %u, '%s', '%s', '%s', %i, %i, '%s', %u, %i, %i, %i, %i, %i, %i, '%s', %i);",
-        iEpgId, iStartTime, iEndTime,
+        tag.EpgID(), iStartTime, iEndTime,
         tag.Title().c_str(), tag.PlotOutline().c_str(), tag.Plot().c_str(), tag.GenreType(), tag.GenreSubType(), strGenre.c_str(),
         iFirstAired, tag.ParentalRating(), tag.StarRating(), tag.Notify(),
         tag.SeriesNum(), tag.EpisodeNum(), tag.EpisodePart(), tag.EpisodeName().c_str(),
@@ -422,7 +427,7 @@ int CEpgDatabase::Persist(const CEpgInfoTag &tag, bool bSingleUpdate /* = true *
         "iFirstAired, iParentalRating, iStarRating, bNotify, iSeriesId, "
         "iEpisodeId, iEpisodePart, sEpisodeName, iBroadcastUid, idBroadcast) "
         "VALUES (%u, %u, %u, '%s', '%s', '%s', %i, %i, '%s', %u, %i, %i, %i, %i, %i, %i, '%s', %i, %i);",
-        iEpgId, iStartTime, iEndTime,
+        tag.EpgID(), iStartTime, iEndTime,
         tag.Title().c_str(), tag.PlotOutline().c_str(), tag.Plot().c_str(), tag.GenreType(), tag.GenreSubType(), strGenre.c_str(),
         iFirstAired, tag.ParentalRating(), tag.StarRating(), tag.Notify(),
         tag.SeriesNum(), tag.EpisodeNum(), tag.EpisodePart(), tag.EpisodeName().c_str(),

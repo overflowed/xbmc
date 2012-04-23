@@ -86,12 +86,23 @@ bool CPVRClients::IsConnectedClient(int iClientId)
   return GetConnectedClient(iClientId, client);
 }
 
-bool CPVRClients::GetConnectedClient(int iClientId, boost::shared_ptr<CPVRClient> &addon)
+int CPVRClients::GetClientId(const AddonPtr client) const
+{
+  CSingleLock lock(m_critSection);
+
+  for (CLIENTMAPCITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->ID() == client->ID())
+      return itr->first;
+
+  return -1;
+}
+
+bool CPVRClients::GetConnectedClient(int iClientId, boost::shared_ptr<CPVRClient> &addon) const
 {
   bool bReturn(false);
   CSingleLock lock(m_critSection);
 
-  CLIENTMAPITR itr = m_clientMap.find(iClientId);
+  CLIENTMAPCITR itr = m_clientMap.find(iClientId);
   if (itr != m_clientMap.end() && itr->second->ReadyToUse())
   {
     addon = itr->second;
@@ -123,7 +134,7 @@ void CPVRClients::Unload(void)
 
   /* destroy all clients */
   for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
-    m_clientMap[(*itr).first]->Destroy();
+    itr->second->Destroy();
 
   /* reset class properties */
   m_bChannelScanRunning  = false;
@@ -137,20 +148,13 @@ void CPVRClients::Unload(void)
 
 int CPVRClients::GetFirstConnectedClientID(void)
 {
-  int iReturn(-1);
   CSingleLock lock(m_critSection);
 
   for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
-  {
-    boost::shared_ptr<CPVRClient> client = m_clientMap[(*itr).first];
-    if (client->ReadyToUse())
-    {
-      iReturn = client->GetID();
-      break;
-    }
-  }
+    if (itr->second->ReadyToUse())
+      return itr->second->GetID();
 
-  return iReturn;
+  return -1;
 }
 
 bool CPVRClients::AllClientsConnected(void) const
@@ -161,14 +165,25 @@ bool CPVRClients::AllClientsConnected(void) const
 
 int CPVRClients::EnabledClientAmount(void) const
 {
+  int iReturn(0);
   CSingleLock lock(m_critSection);
-  return m_clientMap.size();
+
+  for (CLIENTMAPCITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->Enabled())
+      ++iReturn;
+
+  return iReturn;
 }
 
 bool CPVRClients::HasEnabledClients(void) const
 {
   CSingleLock lock(m_critSection);
-  return !m_clientMap.empty();
+
+  for (CLIENTMAPCITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->Enabled())
+      return true;
+
+  return false;
 }
 
 bool CPVRClients::StopClient(AddonPtr client, bool bRestart)
@@ -180,18 +195,14 @@ bool CPVRClients::StopClient(AddonPtr client, bool bRestart)
   boost::shared_ptr<CPVRClient> mappedClient;
   {
     CSingleLock lock(m_critSection);
-    CLIENTMAPITR itr = m_clientMap.begin();
-    while (!bFoundClient && itr != m_clientMap.end())
+    int iId = GetClientId(client);
+    if (iId != -1)
     {
-      if (m_clientMap[(*itr).first]->ID() == client->ID())
-      {
-        bFoundClient = true;
-        mappedClient = m_clientMap[(*itr).first];
+      bFoundClient = true;
+      mappedClient = m_clientMap[iId];
 
-        if (!bRestart)
-          m_clientMap.erase((*itr).first);
-      }
-      itr++;
+      if (!bRestart)
+        m_clientMap.erase(iId);
     }
   }
 
@@ -199,19 +210,9 @@ bool CPVRClients::StopClient(AddonPtr client, bool bRestart)
   {
     g_PVRManager.StopUpdateThreads();
     if (bRestart)
-    {
       mappedClient->ReCreate();
-    }
     else
-    {
       mappedClient->Destroy();
-      CPVRDatabase *database = OpenPVRDatabase();
-      if (database)
-      {
-        database->DeleteClient(mappedClient->ID());
-        database->Close();
-      }
-    }
     g_PVRManager.StartUpdateThreads();
   }
 
@@ -223,40 +224,22 @@ int CPVRClients::ConnectedClientAmount(void)
   int iReturn(0);
   CSingleLock lock(m_critSection);
 
-  if (!m_clientMap.empty())
-  {
-    CLIENTMAPITR itr = m_clientMap.begin();
-    while (itr != m_clientMap.end())
-    {
-      if (m_clientMap[(*itr).first]->ReadyToUse())
-        ++iReturn;
-      itr++;
-    }
-  }
+  for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->ReadyToUse())
+      ++iReturn;
 
   return iReturn;
 }
 
 bool CPVRClients::HasConnectedClients(void)
 {
-  bool bReturn(false);
   CSingleLock lock(m_critSection);
 
-  if (!m_clientMap.empty())
-  {
-    CLIENTMAPITR itr = m_clientMap.begin();
-    while (itr != m_clientMap.end())
-    {
-      if (m_clientMap[(*itr).first]->ReadyToUse())
-      {
-        bReturn = true;
-        break;
-      }
-      itr++;
-    }
-  }
+  for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->ReadyToUse())
+      return true;
 
-  return bReturn;
+  return false;
 }
 
 bool CPVRClients::GetClientName(int iClientId, CStdString &strName)
@@ -274,19 +257,12 @@ int CPVRClients::GetConnectedClients(CLIENTMAP *clients)
   int iReturn(0);
   CSingleLock lock(m_critSection);
 
-  if (m_clientMap.size() > 0)
+  for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
   {
-    CLIENTMAPITR itr = m_clientMap.begin();
-    while (itr != m_clientMap.end())
+    if (itr->second->ReadyToUse())
     {
-      boost::shared_ptr<CPVRClient> client = m_clientMap[(*itr).first];
-      if (client->ReadyToUse())
-      {
-        clients->insert(std::make_pair(client->GetID(), client));
-        ++iReturn;
-        break;
-      }
-      itr++;
+      clients->insert(std::make_pair(itr->second->GetID(), itr->second));
+      ++iReturn;
     }
   }
 
@@ -306,7 +282,7 @@ int CPVRClients::GetPlayingClientID(void) const
   return iReturn;
 }
 
-PVR_ADDON_CAPABILITIES CPVRClients::GetAddonCapabilities(int iClientId)
+PVR_ADDON_CAPABILITIES CPVRClients::GetAddonCapabilities(int iClientId) const
 {
   PVR_ADDON_CAPABILITIES props;
   memset(&props, 0, sizeof(PVR_ADDON_CAPABILITIES));
@@ -536,27 +512,33 @@ bool CPVRClients::SwitchChannel(const CPVRChannel &channel)
   {
     if (currentChannel != channel)
     {
-      CloseStream();
-      bSwitchSuccessful = OpenLiveStream(channel);
+      /* different client add-on */
+      if (currentChannel.ClientID() != channel.ClientID() ||
+      /* switch from radio -> tv or tv -> radio */
+      currentChannel.IsRadio() != channel.IsRadio())
+      {
+        CloseStream();
+        bSwitchSuccessful = OpenLiveStream(channel);
+      }
+      else if (!channel.StreamURL().IsEmpty() || !currentChannel.StreamURL().IsEmpty())
+      {
+        // StreamURL should always be opened as a new file
+        CFileItem m_currentFile(channel);
+        g_application.getApplicationMessenger().PlayFile(m_currentFile, false);
+        bSwitchSuccessful = true;
+        bNewStreamOpened = true;
+      }
+      else
+      {
+        boost::shared_ptr<CPVRClient> client;
+        if (GetConnectedClient(channel.ClientID(), client))
+          bSwitchSuccessful = client->SwitchChannel(channel);
+      }
     }
     else
     {
       bSwitchSuccessful = true;
     }
-  }
-  else if (!channel.StreamURL().IsEmpty() || !currentChannel.StreamURL().IsEmpty())
-  {
-    // StreamURL should always be opened as a new file
-    CFileItem m_currentFile(channel);
-    g_application.getApplicationMessenger().PlayFile(m_currentFile, false);
-    bSwitchSuccessful = true;
-    bNewStreamOpened = true;
-  }
-  else
-  {
-    boost::shared_ptr<CPVRClient> client;
-    if (GetConnectedClient(channel.ClientID(), client))
-      bSwitchSuccessful = client->SwitchChannel(channel);
   }
 
   {
@@ -698,7 +680,7 @@ bool CPVRClients::HasTimerSupport(int iClientId)
 
 int CPVRClients::GetTimers(CPVRTimers *timers)
 {
-  int iCurSize = timers->size();
+  int iCurSize = timers->GetNumActiveTimers();
   CLIENTMAP clients;
   GetConnectedClients(&clients);
 
@@ -714,7 +696,7 @@ int CPVRClients::GetTimers(CPVRTimers *timers)
     ++itrClients;
   }
 
-  return timers->size() - iCurSize;
+  return timers->GetNumActiveTimers() - iCurSize;
 }
 
 bool CPVRClients::AddTimer(const CPVRTimerInfoTag &timer, PVR_ERROR *error)
@@ -996,13 +978,10 @@ void CPVRClients::StartChannelScan(void)
   m_bChannelScanRunning = true;
 
   /* get clients that support channel scanning */
-  CLIENTMAPITR itr = m_clientMap.begin();
-  while (itr != m_clientMap.end())
+  for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
   {
-    if (m_clientMap[(*itr).first]->ReadyToUse() && m_clientMap[(*itr).first]->GetAddonCapabilities().bSupportsChannelScan)
-      possibleScanClients.push_back(m_clientMap[(*itr).first]);
-
-    itr++;
+    if (itr->second->ReadyToUse() && itr->second->GetAddonCapabilities().bSupportsChannelScan)
+      possibleScanClients.push_back(itr->second);
   }
 
   /* multiple clients found */
@@ -1058,8 +1037,8 @@ void CPVRClients::StartChannelScan(void)
 int CPVRClients::AddClientToDb(const AddonPtr client)
 {
   /* add this client to the database if it's not in there yet */
-  CPVRDatabase *database = OpenPVRDatabase();
-  int iClientDbId = database ? database->AddClient(client->Name(), client->ID()) : -1;
+  CPVRDatabase *database = GetPVRDatabase();
+  int iClientDbId = database ? database->Persist(client) : -1;
   if (iClientDbId == -1)
   {
     CLog::Log(LOGERROR, "PVR - %s - can't add client '%s' to the database",
@@ -1069,22 +1048,15 @@ int CPVRClients::AddClientToDb(const AddonPtr client)
   return iClientDbId;
 }
 
-bool CPVRClients::IsKnownClient(const AddonPtr client)
+bool CPVRClients::IsKnownClient(const AddonPtr client) const
 {
-  bool bReturn(false);
   CSingleLock lock(m_critSection);
 
-  for (CLIENTMAPITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
-  {
-    if (m_clientMap[(*itr).first]->ID().Equals(client->ID()) &&
-        m_clientMap[(*itr).first]->Name().Equals(client->Name()))
-    {
-      bReturn = true;
-      break;
-    }
-  }
+  for (CLIENTMAPCITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+    if (itr->second->ID() == client->ID())
+      return true;
 
-  return bReturn;
+  return false;
 }
 
 bool CPVRClients::InitialiseClient(AddonPtr client)
@@ -1101,16 +1073,23 @@ bool CPVRClients::InitialiseClient(AddonPtr client)
     return bReturn;
 
   /* load and initialise the client libraries */
-  boost::shared_ptr<CPVRClient> addon = boost::dynamic_pointer_cast<CPVRClient>(client);
-  if (addon)
+  boost::shared_ptr<CPVRClient> addon;
   {
-    addon->Create(iClientId);
-    if ((bReturn = addon->ReadyToUse()) == true)
+    CSingleLock lock(m_critSection);
+    CLIENTMAPITR existingClient = m_clientMap.find(iClientId);
+    if (existingClient != m_clientMap.end())
     {
-      CSingleLock lock(m_critSection);
+      addon = existingClient->second;
+    }
+    else
+    {
+      addon = boost::dynamic_pointer_cast<CPVRClient>(client);
       m_clientMap.insert(std::make_pair(iClientId, addon));
     }
   }
+
+  if (addon)
+    bReturn = addon->Create(iClientId);
 
   if (!bReturn)
     CLog::Log(LOGERROR, "PVR - %s - can't initialise add-on '%s'", __FUNCTION__, client->Name().c_str());
@@ -1192,8 +1171,7 @@ void CPVRClients::Process(void)
   CAddonMgr::Get().RegisterAddonMgrCallback(ADDON_PVRDLL, this);
   CAddonMgr::Get().RegisterObserver(this);
 
-  if (!UpdateAddons())
-    return;
+  UpdateAddons();
 
   while (!g_application.m_bStop && !m_bStop)
   {
@@ -1248,7 +1226,7 @@ void CPVRClients::SaveCurrentChannelSettings(void)
       return;
   }
 
-  CPVRDatabase *database = OpenPVRDatabase();
+  CPVRDatabase *database = GetPVRDatabase();
   if (!database)
     return;
 
@@ -1264,8 +1242,6 @@ void CPVRClients::SaveCurrentChannelSettings(void)
         __FUNCTION__, channel.ChannelName().c_str());
     database->DeleteChannelSettings(channel);
   }
-
-  database->Close();
 }
 
 void CPVRClients::LoadCurrentChannelSettings(void)
@@ -1277,7 +1253,7 @@ void CPVRClients::LoadCurrentChannelSettings(void)
       return;
   }
 
-  CPVRDatabase *database = OpenPVRDatabase();
+  CPVRDatabase *database = GetPVRDatabase();
   if (!database)
     return;
 
@@ -1288,7 +1264,6 @@ void CPVRClients::LoadCurrentChannelSettings(void)
 
     /* try to load the settings from the database */
     database->GetChannelSettings(channel, loadedChannelSettings);
-    database->Close();
 
     g_settings.m_currentVideoSettings = g_settings.m_defaultVideoSettings;
     g_settings.m_currentVideoSettings.m_Brightness          = loadedChannelSettings.m_Brightness;
@@ -1349,11 +1324,14 @@ void CPVRClients::LoadCurrentChannelSettings(void)
 
 bool CPVRClients::UpdateAddons(void)
 {
-  bool bReturn(false);
-  CSingleLock lock(m_critSection);
+  ADDON::VECADDONS addons;
+  bool bReturn(CAddonMgr::Get().GetAddons(ADDON_PVRDLL, addons, true, false));
 
-  if ((bReturn = CAddonMgr::Get().GetAddons(ADDON_PVRDLL, m_addons, true)) == false)
-    CLog::Log(LOGERROR, "%s - failed to get add-ons from the add-on manager", __FUNCTION__);
+  if (bReturn)
+  {
+    CSingleLock lock(m_critSection);
+    m_addons = addons;
+  }
 
   return bReturn;
 }
@@ -1365,4 +1343,18 @@ void CPVRClients::Notify(const Observable &obs, const CStdString& msg)
     UpdateAddons();
     UpdateAndInitialiseClients();
   }
+}
+
+bool CPVRClients::GetClient(const CStdString &strId, ADDON::AddonPtr &addon) const
+{
+  CSingleLock lock(m_critSection);
+  for (CLIENTMAPCITR itr = m_clientMap.begin(); itr != m_clientMap.end(); itr++)
+  {
+    if (itr->second->ID() == strId)
+    {
+      addon = itr->second;
+      return true;
+    }
+  }
+  return false;
 }

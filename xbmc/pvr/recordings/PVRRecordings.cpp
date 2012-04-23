@@ -27,6 +27,7 @@
 #include "URL.h"
 #include "utils/log.h"
 #include "threads/SingleLock.h"
+#include "video/VideoDatabase.h"
 
 #include "utils/URIUtils.h"
 #include "pvr/PVRManager.h"
@@ -35,9 +36,11 @@
 
 using namespace PVR;
 
-CPVRRecordings::CPVRRecordings(void)
+CPVRRecordings::CPVRRecordings(void) :
+    m_bIsUpdating(false),
+    m_strDirectoryHistory("pvr://recordings/")
 {
-  m_bIsUpdating = false;
+    m_thumbLoader.SetNumOfWorkers(1); 
 }
 
 void CPVRRecordings::UpdateFromClients(void)
@@ -91,7 +94,7 @@ bool CPVRRecordings::IsDirectoryMember(const CStdString &strDirectory, const CSt
       (!bDirectMember || strUseEntryDirectory.Equals(strUseDirectory));
 }
 
-void CPVRRecordings::GetContents(const CStdString &strDirectory, CFileItemList *results) const
+void CPVRRecordings::GetContents(const CStdString &strDirectory, CFileItemList *results)
 {
   for (unsigned int iRecordingPtr = 0; iRecordingPtr < size(); iRecordingPtr++)
   {
@@ -103,11 +106,16 @@ void CPVRRecordings::GetContents(const CStdString &strDirectory, CFileItemList *
     pFileItem->SetLabel2(current->RecordingTimeAsLocalTime().GetAsLocalizedDateTime(true, false));
     pFileItem->m_dateTime = current->RecordingTimeAsLocalTime();
     pFileItem->SetPath(current->m_strFileNameAndPath);
+    CVideoDatabase db;
+    if (db.Open())
+      pFileItem->GetPVRRecordingInfoTag()->m_playCount=db.GetPlayCount(*pFileItem);
+    pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->m_playCount > 0);
+
     results->Add(pFileItem);
   }
 }
 
-void CPVRRecordings::GetSubDirectories(const CStdString &strBase, CFileItemList *results, bool bAutoSkip /* = true */) const
+void CPVRRecordings::GetSubDirectories(const CStdString &strBase, CFileItemList *results, bool bAutoSkip /* = true */)
 {
   CStdString strUseBase = TrimSlashes(strBase);
 
@@ -119,7 +127,10 @@ void CPVRRecordings::GetSubDirectories(const CStdString &strBase, CFileItemList 
       continue;
 
     CStdString strFilePath;
-    strFilePath.Format("pvr://recordings/%s/%s/", strUseBase.c_str(), strCurrent.c_str());
+    if(strUseBase.empty())
+      strFilePath.Format("pvr://recordings/%s/", strCurrent.c_str());
+    else
+      strFilePath.Format("pvr://recordings/%s/%s/", strUseBase.c_str(), strCurrent.c_str());
 
     if (!results->Contains(strFilePath))
     {
@@ -128,7 +139,15 @@ void CPVRRecordings::GetSubDirectories(const CStdString &strBase, CFileItemList 
       pFileItem->SetPath(strFilePath);
       pFileItem->SetLabel(strCurrent);
       pFileItem->SetLabelPreformated(true);
+      pFileItem->m_dateTime = current->RecordingTimeAsLocalTime();
       results->Add(pFileItem);
+    }
+    else
+    {
+      CFileItemPtr pFileItem;
+      pFileItem=results->Get(strFilePath);
+      if (pFileItem->m_dateTime<current->RecordingTimeAsLocalTime())
+        pFileItem->m_dateTime  = current->RecordingTimeAsLocalTime();
     }
   }
 
@@ -149,6 +168,17 @@ void CPVRRecordings::GetSubDirectories(const CStdString &strBase, CFileItemList 
   }
 
   results->Append(files);
+
+  if (!strUseBase.IsEmpty())
+  {
+    CStdString strLabel("..");
+    CFileItemPtr pItem(new CFileItem(strLabel));
+    pItem->SetPath(m_strDirectoryHistory);
+    pItem->m_bIsFolder = true;
+    pItem->m_bIsShareOrDrive = false;
+    results->AddFront(pItem, 0);
+  }
+  m_strDirectoryHistory.Format("pvr://recordings/%s", strUseBase.c_str());
 }
 
 int CPVRRecordings::Load(void)
@@ -229,24 +259,37 @@ bool CPVRRecordings::RenameRecording(CFileItem &item, CStdString &strNewName)
 
 bool CPVRRecordings::GetDirectory(const CStdString& strPath, CFileItemList &items)
 {
-  CSingleLock lock(m_critSection);
+  bool bSuccess(false);
+  CFileItemList files;
 
-  CStdString strBase(strPath);
-  URIUtils::RemoveSlashAtEnd(strBase);
-
-  CURL url(strPath);
-  CStdString strFileName = url.GetFileName();
-  URIUtils::RemoveSlashAtEnd(strFileName);
-
-  if (strFileName.Left(10) == "recordings")
   {
-    strFileName.erase(0, 10);
-    GetSubDirectories(strFileName, &items, true);
+    CSingleLock lock(m_critSection);
 
-    return true;
+    CURL url(strPath);
+    CStdString strFileName = url.GetFileName();
+    URIUtils::RemoveSlashAtEnd(strFileName);
+
+    if (strFileName.Left(10) == "recordings")
+    {
+      strFileName.erase(0, 10);
+      GetSubDirectories(strFileName, &items, true);
+      GetContents(strFileName, &files);
+      bSuccess = true;
+    }
   }
 
-  return false;
+  if(bSuccess)
+  {
+    for (int i = 0; i < files.Size(); i++)
+    {
+      CFileItemPtr pFileItem = files.Get(i);
+      CFileItemPtr pThumbItem = items.Get(pFileItem->GetPath());
+      if (!pThumbItem->HasThumbnail())
+        m_thumbLoader.LoadItem(pThumbItem.get());
+    }
+  }
+
+  return bSuccess;
 }
 
 CPVRRecording *CPVRRecordings::GetByPath(const CStdString &path)

@@ -69,6 +69,20 @@ class DPMSSupport;
 class CSplash;
 class CBookmark;
 class CWebServer;
+#ifdef HAS_WEB_SERVER
+class CWebServer;
+class CHTTPVfsHandler;
+#ifdef HAS_JSONRPC
+class CHTTPJsonRpcHandler;
+#endif
+#ifdef HAS_HTTPAPI
+class CHTTPApiHandler;
+#endif
+#ifdef HAS_WEB_INTERFACE
+class CHTTPWebinterfaceHandler;
+class CHTTPWebinterfaceAddonsHandler;
+#endif
+#endif
 
 class CBackgroundPlayer : public CThread
 {
@@ -153,6 +167,7 @@ public:
   bool IsPlayingVideo() const;
   bool IsPlayingFullScreenVideo() const;
   bool IsStartingPlayback() const { return m_bPlaybackStarting; }
+  bool IsFullScreen();
   bool OnKey(const CKey& key);
   bool OnAppCommand(const CAction &action);
   bool OnAction(const CAction &action);
@@ -226,11 +241,22 @@ public:
   MEDIA_DETECT::CDetectDVDMedia m_DetectDVDType;
 #endif
 
+  IPlayer* m_pPlayer;
+
 #ifdef HAS_WEB_SERVER
   CWebServer& m_WebServer;
+  CHTTPVfsHandler& m_httpVfsHandler;
+#ifdef HAS_JSONRPC
+  CHTTPJsonRpcHandler& m_httpJsonRpcHandler;
 #endif
-
-  IPlayer* m_pPlayer;
+#ifdef HAS_HTTPAPI
+  CHTTPApiHandler& m_httpApiHandler;
+#endif
+#ifdef HAS_WEB_INTERFACE
+  CHTTPWebinterfaceHandler& m_httpWebinterfaceHandler;
+  CHTTPWebinterfaceAddonsHandler& m_httpWebinterfaceAddonsHandler;
+#endif
+#endif
 
   inline bool IsInScreenSaver() { return m_bScreenSave; };
   int m_iScreenSaveLock; // spiff: are we checking for a lock? if so, ignore the screensaver state, if -1 we have failed to input locks
@@ -370,7 +396,8 @@ protected:
   bool ProcessEventServer(float frameTime);
   bool ProcessPeripherals(float frameTime);
   bool ProcessHTTPApiButtons();
-  bool ProcessJoystickEvent(const std::string& joystickName, int button, bool isAxis, float fAmount);
+  bool ProcessJsonRpcButtons();
+  bool ProcessJoystickEvent(const std::string& joystickName, int button, bool isAxis, float fAmount, unsigned int holdTime = 0);
 
   float NavigationIdleTime();
   static bool AlwaysProcess(const CAction& action);

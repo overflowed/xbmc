@@ -361,7 +361,12 @@ CStdString URIUtils::SubstitutePath(const CStdString& strPath)
       i != g_advancedSettings.m_pathSubstitutions.end(); i++)
   {
     if (strncmp(strPath.c_str(), i->first.c_str(), i->first.size()) == 0)
-      return URIUtils::AddFileToFolder(i->second, strPath.Mid(i->first.size()));
+    {
+      if (strPath.size() > i->first.size())
+        return URIUtils::AddFileToFolder(i->second, strPath.Mid(i->first.size()));
+      else
+        return i->second;
+    }
   }
   return strPath;
 }
@@ -444,7 +449,7 @@ bool URIUtils::IsOnLAN(const CStdString& strPath)
     return true;
 
   CURL url(strPath);
-  if(IsInArchive(strPath))
+  if (url.GetProtocol() == "rar" || url.GetProtocol() == "zip")
     return IsOnLAN(url.GetHostName());
 
   if(!IsRemote(strPath))
@@ -498,7 +503,7 @@ bool URIUtils::IsHD(const CStdString& strFileName)
   if (IsInArchive(strFileName))
     return IsHD(url.GetHostName());
 
-  return url.IsLocal();
+  return url.GetProtocol().IsEmpty() || url.GetProtocol() == "file";
 }
 
 bool URIUtils::IsDVD(const CStdString& strFile)

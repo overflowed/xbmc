@@ -113,6 +113,14 @@ CVariant::CVariant(const string &str)
   m_string = str;
 }
 
+CVariant::CVariant(const std::vector<std::string> &strArray)
+{
+  m_type = VariantTypeArray;
+  m_array.clear();
+  for (unsigned int index = 0; index < strArray.size(); index++)
+    m_array.push_back(strArray.at(index));
+}
+
 CVariant::CVariant(const CVariant &variant)
 {
   m_type = variant.m_type;
@@ -239,11 +247,11 @@ bool CVariant::asBoolean(bool fallback) const
     case VariantTypeBoolean:
       return m_data.boolean;
     case VariantTypeInteger:
-      return (bool)m_data.integer;
+      return (m_data.integer != 0);
     case VariantTypeUnsignedInteger:
-      return (bool)m_data.unsignedinteger;
+      return (m_data.unsignedinteger != 0);
     case VariantTypeDouble:
-      return (bool)m_data.dvalue;
+      return (m_data.dvalue != 0);
     case VariantTypeString:
       if (m_string.empty() || m_string.compare("0") == 0 || m_string.compare("false") == 0)
         return false;

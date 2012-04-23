@@ -23,7 +23,7 @@
 
 #if defined(HAVE_CONFIG_H) && !defined(TARGET_WINDOWS)
 #include "config.h"
-#define DECLARE_UNUSED(a,b) a __attribute__(unused) b;
+#define DECLARE_UNUSED(a,b) a __attribute__((unused)) b;
 #endif
 
 /*****************
@@ -219,12 +219,6 @@
 #include <sys/types.h>
 #include <errno.h>
 #include "PlatformInclude.h"
-#endif
-
-// ARM does not support certain features... disable them here!
-#ifdef _ARMEL
-#undef HAS_VISUALISATION
-#undef HAS_FILESYSTEM_HTSP
 #endif
 
 // EGL detected. Dont use GLX!

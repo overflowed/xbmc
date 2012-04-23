@@ -561,7 +561,7 @@ int CBuiltins::Execute(const CStdString& execString)
         askToResume = false;
       }
       else if (params[i].Left(11).Equals("playoffset="))
-        item.SetProperty("playlist_starting_track", params[i].Mid(11) - 1);
+        item.SetProperty("playlist_starting_track", atoi(params[i].Mid(11)) - 1);
     }
 
     if (!item.m_bIsFolder && item.IsPlugin())
@@ -865,7 +865,17 @@ int CBuiltins::Execute(const CStdString& execString)
   }
   else if (execute.Equals("setvolume"))
   {
-    g_application.SetVolume(atoi(parameter.c_str()));
+    int oldVolume = g_application.GetVolume();
+    int volume = atoi(parameter.c_str());
+
+    g_application.SetVolume(volume);   
+    if(oldVolume != volume)
+    {
+      if(params.size() > 1 && params[1].Equals("showVolumeBar"))    
+      {
+        g_application.getApplicationMessenger().ShowVolumeBar(oldVolume < volume);  
+      }
+    }
   }
   else if (execute.Equals("playlist.playoffset"))
   {

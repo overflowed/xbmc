@@ -23,8 +23,10 @@
 
 #include "dialogs/GUIDialogFileBrowser.h"
 #include "dialogs/GUIDialogNumeric.h"
+#include "dialogs/GUIDialogKaiToast.h"
 #include "dialogs/GUIDialogOK.h"
 #include "dialogs/GUIDialogYesNo.h"
+#include "dialogs/GUIDialogKeyboard.h"
 #include "guilib/GUIWindowManager.h"
 #include "GUIInfoManager.h"
 #include "pvr/PVRManager.h"
@@ -47,11 +49,19 @@ CGUIWindowPVRChannels::CGUIWindowPVRChannels(CGUIWindowPVR *parent, bool bRadio)
   CGUIWindowPVRCommon(parent,
                       bRadio ? PVR_WINDOW_CHANNELS_RADIO : PVR_WINDOW_CHANNELS_TV,
                       bRadio ? CONTROL_BTNCHANNELS_RADIO : CONTROL_BTNCHANNELS_TV,
-                      bRadio ? CONTROL_LIST_CHANNELS_RADIO: CONTROL_LIST_CHANNELS_TV)
+                      bRadio ? CONTROL_LIST_CHANNELS_RADIO: CONTROL_LIST_CHANNELS_TV),
+  CThread("PVR Channel Window")
 {
   m_bRadio              = bRadio;
   m_selectedGroup       = NULL;
   m_bShowHiddenChannels = false;
+  m_bThreadCreated      = false;
+}
+
+CGUIWindowPVRChannels::~CGUIWindowPVRChannels(void)
+{
+  if (m_bThreadCreated)
+    StopThread(true);
 }
 
 void CGUIWindowPVRChannels::ResetObservers(void)
@@ -99,6 +109,9 @@ void CGUIWindowPVRChannels::GetContextButtons(int itemNumber, CContextButtons &b
 
     if (g_PVRClients->HasMenuHooks(pItem->GetPVRChannelInfoTag()->ClientID()))
       buttons.Add(CONTEXT_BUTTON_MENU_HOOKS, 19195);                                  /* PVR client specific action */
+
+    buttons.Add(CONTEXT_BUTTON_FILTER, 19249);                                        /* filter channels */
+    buttons.Add(CONTEXT_BUTTON_UPDATE_EPG, 19251);                                    /* update EPG information */
   }
 }
 
@@ -116,6 +129,8 @@ bool CGUIWindowPVRChannels::OnContextButton(int itemNumber, CONTEXT_BUTTON butto
       OnContextButtonAdd(pItem.get(), button) ||
       OnContextButtonInfo(pItem.get(), button) ||
       OnContextButtonGroupManager(pItem.get(), button) ||
+      OnContextButtonFilter(pItem.get(), button) ||
+      OnContextButtonUpdateEpg(pItem.get(), button) ||
       CGUIWindowPVRCommon::OnContextButton(itemNumber, button);
 }
 
@@ -232,6 +247,13 @@ void CGUIWindowPVRChannels::UpdateData(void)
     m_parent->SetLabel(CONTROL_LABELGROUP, g_localizeStrings.Get(19022));
   else
     m_parent->SetLabel(CONTROL_LABELGROUP, currentGroup->GroupName());
+
+  if (!m_bThreadCreated)
+  {
+    m_bThreadCreated = true;
+    Create();
+    SetPriority(-1);
+  }
 }
 
 bool CGUIWindowPVRChannels::OnClickButton(CGUIMessage &message)
@@ -468,6 +490,54 @@ bool CGUIWindowPVRChannels::OnContextButtonShowHidden(CFileItem *item, CONTEXT_B
   return bReturn;
 }
 
+bool CGUIWindowPVRChannels::OnContextButtonFilter(CFileItem *item, CONTEXT_BUTTON button)
+{
+  bool bReturn = false;
+
+  if (button == CONTEXT_BUTTON_FILTER)
+  {
+    CStdString filter = m_parent->GetProperty("filter").asString();
+    CGUIDialogKeyboard::ShowAndGetFilter(filter, false);
+    m_parent->OnFilterItems(filter);
+
+    bReturn = true;
+  }
+
+  return bReturn;
+}
+
+bool CGUIWindowPVRChannels::OnContextButtonUpdateEpg(CFileItem *item, CONTEXT_BUTTON button)
+{
+  bool bReturn = false;
+
+  if (button == CONTEXT_BUTTON_UPDATE_EPG)
+  {
+    CGUIDialogYesNo* pDialog = (CGUIDialogYesNo*)g_windowManager.GetWindow(WINDOW_DIALOG_YES_NO);
+    if (!pDialog)
+      return bReturn;
+
+    CPVRChannel *channel = item->GetPVRChannelInfoTag();
+    pDialog->SetHeading(19251);
+    pDialog->SetLine(0, g_localizeStrings.Get(19252));
+    pDialog->SetLine(1, channel->ChannelName());
+    pDialog->SetLine(2, "");
+    pDialog->DoModal();
+
+    if (!pDialog->IsConfirmed())
+      return bReturn;
+
+    bReturn = UpdateEpgForChannel(item);
+
+    CStdString strMessage;
+    strMessage.Format("%s: '%s'", g_localizeStrings.Get(bReturn ? 19253 : 19254), channel->ChannelName());
+    CGUIDialogKaiToast::QueueNotification(bReturn ? CGUIDialogKaiToast::Info : CGUIDialogKaiToast::Error,
+        g_localizeStrings.Get(19166),
+        strMessage);
+  }
+
+  return bReturn;
+}
+
 void CGUIWindowPVRChannels::ShowGroupManager(void)
 {
   /* Load group manager dialog */
@@ -479,4 +549,19 @@ void CGUIWindowPVRChannels::ShowGroupManager(void)
   pDlgInfo->DoModal();
 
   return;
+}
+
+void CGUIWindowPVRChannels::Process(void)
+{
+  // ugly hack to refresh the progress bars and item contents every 5 seconds
+  int iCount(0);
+  while (!m_bStop)
+  {
+    if (++iCount == 100)
+    {
+      iCount = 0;
+      SetInvalid();
+    }
+    Sleep(50);
+  }
 }

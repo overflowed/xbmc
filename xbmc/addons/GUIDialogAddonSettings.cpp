@@ -48,7 +48,6 @@
 #include "dialogs/GUIDialogSelect.h"
 #include "GUIWindowAddonBrowser.h"
 #include "utils/log.h"
-#include "system.h"
 
 using namespace std;
 using namespace ADDON;
@@ -321,9 +320,7 @@ bool CGUIDialogAddonSettings::ShowVirtualKeyboard(int iControl)
         {
           // setup the shares
           VECSOURCES *shares = NULL;
-          if (!source || strcmpi(source, "") == 0)
-            shares = g_settings.GetSourcesFromType(type);
-          else
+          if (source && strcmpi(source, "") != 0)
             shares = g_settings.GetSourcesFromType(source);
 
           VECSOURCES localShares;
@@ -332,8 +329,7 @@ bool CGUIDialogAddonSettings::ShowVirtualKeyboard(int iControl)
             VECSOURCES networkShares;
             g_mediaManager.GetLocalDrives(localShares);
             if (!source || strcmpi(source, "local") != 0)
-              g_mediaManager.GetNetworkLocations(networkShares);
-            localShares.insert(localShares.end(), networkShares.begin(), networkShares.end());
+              g_mediaManager.GetNetworkLocations(localShares);
           }
           else // always append local drives
           {
@@ -346,29 +342,7 @@ bool CGUIDialogAddonSettings::ShowVirtualKeyboard(int iControl)
             // get any options
             bool bWriteOnly = false;
             if (option)
-            {
-              std::string options = option;
-
-              bWriteOnly = (options.find("writeable") != string::npos);
-
-              if (options.find("smb") != string::npos)
-              {
-                CMediaSource smbshare;
-                smbshare.strPath = "smb://";
-                smbshare.strName = g_localizeStrings.Get(20171);
-                localShares.push_back(smbshare);
-              }
-
-#ifdef HAS_FILESYSTEM_NFS
-              if (options.find("nfs") != string::npos)
-              {
-                CMediaSource nfsshare;
-                nfsshare.strPath = "nfs://";
-                nfsshare.strName = g_localizeStrings.Get(20259);
-                localShares.push_back(nfsshare);
-              }
-#endif// HAS_FILESYSTEM_NFS
-            }
+              bWriteOnly = (strcmpi(option, "writeable") == 0);
 
             if (CGUIDialogFileBrowser::ShowAndGetDirectory(localShares, label, value, bWriteOnly))
               ((CGUIButtonControl*) control)->SetLabel2(value);
@@ -560,7 +534,9 @@ void CGUIDialogAddonSettings::SaveSettings(void)
     m_addon->UpdateSetting(i->first, i->second);
 
   if (m_saveToDisk)
+  { 
     m_addon->SaveSettings();
+  } 
 }
 
 void CGUIDialogAddonSettings::FreeSections()
@@ -942,9 +918,9 @@ vector<CStdString> CGUIDialogAddonSettings::GetFileEnumValues(const CStdString &
   // fetch directory
   CFileItemList items;
   if (!mask.IsEmpty())
-    CDirectory::GetDirectory(fullPath, items, mask, false);
+    CDirectory::GetDirectory(fullPath, items, mask, XFILE::DIR_FLAG_NO_FILE_DIRS);
   else
-    CDirectory::GetDirectory(fullPath, items, "", false);
+    CDirectory::GetDirectory(fullPath, items, "", XFILE::DIR_FLAG_NO_FILE_DIRS);
 
   vector<CStdString> values;
   for (int i = 0; i < items.Size(); ++i)
@@ -992,7 +968,9 @@ bool CGUIDialogAddonSettings::GetCondition(const CStdString &condition, const in
 
   bool bCondition = true;
   bool bCompare = true;
+  bool bControlDependend = false;//flag if the condition depends on another control
   vector<CStdString> conditionVec;
+
   if (condition.Find("+") >= 0)
     CUtil::Tokenize(condition, conditionVec, "+");
   else
@@ -1010,6 +988,8 @@ bool CGUIDialogAddonSettings::GetCondition(const CStdString &condition, const in
     const CGUIControl* control2 = GetControl(controlId + atoi(condVec[1]));
     if (!control2)
       continue;
+      
+    bControlDependend = true; //once we are here - this condition depends on another control
 
     CStdString value;
     switch (control2->GetControlType())
@@ -1059,6 +1039,12 @@ bool CGUIDialogAddonSettings::GetCondition(const CStdString &condition, const in
         bCondition |= (atoi(value) < atoi(condVec[2]));
     }
   }
+  
+  if (!bControlDependend)//if condition doesn't depend on another control - try if its an infobool expression
+  {
+    bCondition = g_infoManager.EvaluateBool(condition);
+  }
+  
   return bCondition;
 }
 
@@ -1086,10 +1072,9 @@ CStdString CGUIDialogAddonSettings::GetString(const char *value, bool subSetting
 {
   if (!value)
     return "";
-  int id = atoi(value);
   CStdString prefix(subSetting ? "- " : "");
-  if (id > 0)
-    return prefix + m_addon->GetString(id);
+  if (StringUtils::IsNaturalNumber(value))
+    return prefix + m_addon->GetString(atoi(value));
   return prefix + value;
 }
 

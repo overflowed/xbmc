@@ -135,6 +135,7 @@ void CGUIWindowPVRCommon::SetInvalid()
 {
   for (int iItemPtr = 0; iItemPtr < m_parent->m_vecItems->Size(); iItemPtr++)
     m_parent->m_vecItems->Get(iItemPtr)->SetInvalid();
+  m_parent->SetInvalid();
 }
 
 void CGUIWindowPVRCommon::OnInitWindow()
@@ -417,8 +418,7 @@ bool CGUIWindowPVRCommon::ActionRecord(CFileItem *item)
   if (!epgTag)
     return bReturn;
 
-  const CPVRChannel *channel = epgTag->ChannelTag();
-  if (!channel || channel->ChannelNumber() > 0)
+  if (!epgTag->HasPVRChannel())
     return bReturn;
 
   if (epgTag->Timer() == NULL)
@@ -553,6 +553,17 @@ bool CGUIWindowPVRCommon::ActionDeleteChannel(CFileItem *item)
   g_PVRChannelGroups->GetGroupAll(channel->IsRadio())->RemoveFromGroup(*channel);
   UpdateData();
 
+  return true;
+}
+
+bool CGUIWindowPVRCommon::UpdateEpgForChannel(CFileItem *item)
+{
+  CPVRChannel *channel = item->GetPVRChannelInfoTag();
+  CEpg *epg = channel->GetEPG();
+  if (!epg)
+    return false;
+
+  epg->ForceUpdate();
   return true;
 }
 
@@ -697,7 +708,7 @@ bool CGUIWindowPVRCommon::StartRecordFile(CFileItem *item)
     return false;
 
   CEpgInfoTag *tag = item->GetEPGInfoTag();
-  if (!tag || !tag->ChannelTag() || tag->ChannelTag()->ChannelNumber() <= 0)
+  if (!tag || !tag->HasPVRChannel())
     return false;
 
   CPVRTimerInfoTag *timer = g_PVRTimers->GetMatch(item);
@@ -711,7 +722,7 @@ bool CGUIWindowPVRCommon::StartRecordFile(CFileItem *item)
   if (!pDialog)
     return false;
   pDialog->SetHeading(264);
-  pDialog->SetLine(0, tag->ChannelTag()->ChannelName());
+  pDialog->SetLine(0, tag->PVRChannelName());
   pDialog->SetLine(1, "");
   pDialog->SetLine(2, tag->Title());
   pDialog->DoModal();
@@ -731,7 +742,7 @@ bool CGUIWindowPVRCommon::StopRecordFile(CFileItem *item)
     return false;
 
   CEpgInfoTag *tag = item->GetEPGInfoTag();
-  if (!tag || !tag->ChannelTag() || tag->ChannelTag()->ChannelNumber() <= 0)
+  if (!tag || !tag->HasPVRChannel())
     return false;
 
   CPVRTimerInfoTag *timer = g_PVRTimers->GetMatch(item);

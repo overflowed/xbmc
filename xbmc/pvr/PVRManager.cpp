@@ -28,6 +28,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "music/tags/MusicInfoTag.h"
+#include "settings/AdvancedSettings.h"
 #include "settings/GUISettings.h"
 #include "settings/Settings.h"
 #include "threads/SingleLock.h"
@@ -70,6 +71,8 @@ CPVRManager::CPVRManager(void) :
 CPVRManager::~CPVRManager(void)
 {
   Stop();
+  if (m_database->IsOpen())
+    m_database->Close();
   CLog::Log(LOGDEBUG,"PVRManager - destroyed");
 }
 
@@ -133,6 +136,8 @@ void CPVRManager::Start(void)
   ResetProperties();
   SetState(ManagerStateStarting);
 
+  m_database->Open();
+
   /* create the supervisor thread to do all background activities */
   StartUpdateThreads();
 }
@@ -145,6 +150,9 @@ void CPVRManager::Stop(void)
     return;
 
   SetState(ManagerStateStopping);
+
+  /* stop the EPG updater, since it might be using the pvr add-ons */
+  g_EpgContainer.Unload();
 
   CLog::Log(LOGNOTICE, "PVRManager - stopping");
 
@@ -167,15 +175,14 @@ void CPVRManager::Stop(void)
 
 ManagerState CPVRManager::GetState(void) const
 {
-  return (ManagerState)cas((volatile long*)(&m_managerState), 0, 0);
+  CSingleLock lock(m_managerStateMutex);
+  return m_managerState;
 }
 
 void CPVRManager::SetState(ManagerState state) 
 {
-  long oldstate = m_managerState;
-  while(oldstate != cas((volatile long*)(&m_managerState), oldstate, state))
-    oldstate = cas((volatile long*)(&m_managerState), oldstate, state);
-  return;
+  CSingleLock lock(m_managerStateMutex);
+  m_managerState = state;
 }
 
 void CPVRManager::Process(void)
@@ -190,28 +197,33 @@ void CPVRManager::Process(void)
   }
 
   if (GetState() == ManagerStateStarting)
-  {
     SetState(ManagerStateStarted);
-  }
   else
-  {
     return;
-  }
 
   /* main loop */
   CLog::Log(LOGDEBUG, "PVRManager - %s - entering main loop", __FUNCTION__);
   g_EpgContainer.Start();
 
-  while (GetState() == ManagerStateStarted && m_addons && m_addons->HasConnectedClients())
+  bool bRestart(false);
+  while (GetState() == ManagerStateStarted && m_addons && m_addons->HasConnectedClients() && !bRestart)
   {
     /* continue last watched channel after first startup */
     if (m_bFirstStart && g_guiSettings.GetInt("pvrplayback.startlast") != START_LAST_CHANNEL_OFF)
       ContinueLastChannel();
 
     /* execute the next pending jobs if there are any */
-    ExecutePendingJobs();
+    try
+    {
+      ExecutePendingJobs();
+    }
+    catch (...)
+    {
+      CLog::Log(LOGERROR, "PVRManager - %s - an error occured while trying to execute the last update job, trying to recover", __FUNCTION__);
+      bRestart = true;
+    }
 
-    if (GetState() == ManagerStateStarted)
+    if (GetState() == ManagerStateStarted && !bRestart)
       m_triggerEvent.WaitMSec(1000);
   }
 
@@ -492,6 +504,7 @@ void CPVRManager::ResetDatabase(bool bShowProgress /* = true */)
   if (g_guiSettings.GetBool("pvrmanager.enabled"))
   {
     CLog::Log(LOGNOTICE,"PVRManager - %s - restarting the PVRManager", __FUNCTION__);
+    m_database->Open();
     Cleanup();
     Start();
   }
@@ -739,7 +752,8 @@ bool CPVRManager::UpdateItem(CFileItem& item)
     if (musictag)
     {
       musictag->SetTitle(bHasTagNow ? epgTagNow.Title() : g_localizeStrings.Get(19055));
-      musictag->SetGenre(bHasTagNow ? epgTagNow.Genre() : StringUtils::EmptyString);
+      if (bHasTagNow)
+        musictag->SetGenre(epgTagNow.Genre());
       musictag->SetDuration(bHasTagNow ? epgTagNow.GetDuration() : 3600);
       musictag->SetURL(channelTag->Path());
       musictag->SetArtist(channelTag->ChannelName());
@@ -755,7 +769,8 @@ bool CPVRManager::UpdateItem(CFileItem& item)
     if (videotag)
     {
       videotag->m_strTitle = bHasTagNow ? epgTagNow.Title() : g_localizeStrings.Get(19055);
-      videotag->m_strGenre = bHasTagNow ? epgTagNow.Genre() : StringUtils::EmptyString;
+      if (bHasTagNow)
+        videotag->m_genre = epgTagNow.Genre();
       videotag->m_strPath = channelTag->Path();
       videotag->m_strFileNameAndPath = channelTag->Path();
       videotag->m_strPlot = bHasTagNow ? epgTagNow.Plot() : StringUtils::EmptyString;
@@ -930,6 +945,11 @@ bool CPVRManager::IsInitialising(void) const
   return GetState() == ManagerStateStarting;
 }
 
+bool CPVRManager::IsStarted(void) const
+{
+  return GetState() == ManagerStateStarted;
+}
+
 bool CPVRManager::IsPlayingTV(void) const
 {
   return IsStarted() && m_addons && m_addons->IsPlayingTV();
@@ -1066,9 +1086,4 @@ void CPVRManager::ExecutePendingJobs(void)
   }
 
   m_triggerEvent.Reset();
-}
-
-bool CPVRManager::IsStarted(void) const
-{
-  return GetState() == ManagerStateStarted;
 }

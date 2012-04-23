@@ -350,7 +350,7 @@ void CGUIWindowSettingsCategory::CreateSettings()
   if (!group)
     return;
   vecSettings settings;
-  g_guiSettings.GetSettingsGroup(m_vecSections[m_iSection]->m_strCategory, settings);
+  g_guiSettings.GetSettingsGroup(m_vecSections[m_iSection], settings);
   int iControlID = CONTROL_START_CONTROL;
   for (unsigned int i = 0; i < settings.size(); i++)
   {
@@ -1596,15 +1596,7 @@ void CGUIWindowSettingsCategory::OnSettingChanged(CBaseSettingControl *pSettingC
     /* okey we really don't need to restarat, only deinit samba, but that could be damn hard if something is playing*/
     //TODO - General way of handling setting changes that require restart
 
-    CGUIDialogOK *dlg = (CGUIDialogOK *)g_windowManager.GetWindow(WINDOW_DIALOG_YES_NO);
-    if (!dlg) return ;
-    dlg->SetHeading( g_localizeStrings.Get(14038) );
-    dlg->SetLine( 0, g_localizeStrings.Get(14039) );
-    dlg->SetLine( 1, g_localizeStrings.Get(14040));
-    dlg->SetLine( 2, "");
-    dlg->DoModal();
-
-    if (dlg->IsConfirmed())
+    if (CGUIDialogYesNo::ShowAndGetInput(14038, 14039, 14040, -1, -1))
     {
       g_settings.Save();
       g_application.getApplicationMessenger().RestartApp();
@@ -2060,8 +2052,12 @@ void CGUIWindowSettingsCategory::FillInSubtitleFonts(CSetting *pSetting)
   // find TTF fonts
   {
     CFileItemList items;
+    CFileItemList items2;
+    CDirectory::GetDirectory("special://home/media/Fonts/", items2);
+
     if (CDirectory::GetDirectory("special://xbmc/media/Fonts/", items))
     {
+      items.Append(items2);
       for (int i = 0; i < items.Size(); ++i)
       {
         CFileItemPtr pItem = items[i];
@@ -2242,30 +2238,34 @@ void CGUIWindowSettingsCategory::FillInCharSets(CSetting *pSetting)
 
 DisplayMode CGUIWindowSettingsCategory::FillInScreens(CStdString strSetting, RESOLUTION res)
 {
-  CBaseSettingControl *control = GetSetting(strSetting);
-  control->SetDelayed();
-  CGUISpinControlEx *pControl = (CGUISpinControlEx *)GetControl(control->GetID());
-  pControl->Clear();
-
-  CStdString strScreen;
-  if (g_advancedSettings.m_canWindowed)
-    pControl->AddLabel(g_localizeStrings.Get(242), -1);
-
-  for (int idx = 0; idx < g_Windowing.GetNumScreens(); idx++)
-  {
-    strScreen.Format(g_localizeStrings.Get(241), g_settings.m_ResInfo[RES_DESKTOP + idx].iScreen + 1);
-    pControl->AddLabel(strScreen, g_settings.m_ResInfo[RES_DESKTOP + idx].iScreen);
-  }
-
   DisplayMode mode;
-
   if (res == RES_WINDOW)
     mode = DM_WINDOWED;
   else
     mode = g_settings.m_ResInfo[res].iScreen;
 
-  pControl->SetValue(mode);
-  g_guiSettings.SetInt("videoscreen.screen", mode);
+  // we expect "videoscreen.screen" but it might be hidden on some platforms,
+  // so check that we actually have a visable control.
+  CBaseSettingControl *control = GetSetting(strSetting);
+  if (control)
+  {
+    control->SetDelayed();
+    CGUISpinControlEx *pControl = (CGUISpinControlEx *)GetControl(control->GetID());
+    pControl->Clear();
+
+    CStdString strScreen;
+    if (g_advancedSettings.m_canWindowed)
+      pControl->AddLabel(g_localizeStrings.Get(242), -1);
+
+    for (int idx = 0; idx < g_Windowing.GetNumScreens(); idx++)
+    {
+      strScreen.Format(g_localizeStrings.Get(241), g_settings.m_ResInfo[RES_DESKTOP + idx].iScreen + 1);
+      pControl->AddLabel(strScreen, g_settings.m_ResInfo[RES_DESKTOP + idx].iScreen);
+    }
+    pControl->SetValue(mode);
+    g_guiSettings.SetInt("videoscreen.screen", mode);
+  }
+
   return mode;
 }
 
@@ -2539,7 +2539,7 @@ void CGUIWindowSettingsCategory::FillInSkinColors(CSetting *pSetting)
   URIUtils::AddFileToFolder(g_SkinInfo->Path(),"colors",strPath);
 
   CFileItemList items;
-  CDirectory::GetDirectory(PTH_IC(strPath), items, ".xml");
+  CDirectory::GetDirectory(CSpecialProtocol::TranslatePathConvertCase(strPath), items, ".xml");
   // Search for Themes in the Current skin!
   for (int i = 0; i < items.Size(); ++i)
   {

@@ -21,9 +21,10 @@
 
 #include "DVDInputStreamTV.h"
 #include "filesystem/MythFile.h"
-#include "filesystem/Slingbox.h"
 #include "filesystem/VTPFile.h"
 #include "pvr/channels/PVRChannel.h"
+#include "filesystem/VTPFile.h"
+#include "filesystem/SlingboxFile.h"
 #include "URL.h"
 
 using namespace XFILE;
@@ -168,15 +169,15 @@ bool CDVDInputStreamTV::SeekTime(int iTimeInMsec)
   return false;
 }
 
-bool CDVDInputStreamTV::NextStream()
+CDVDInputStream::ENextStream CDVDInputStreamTV::NextStream()
 {
-  if(!m_pFile) return false;
+  if(!m_pFile) return NEXTSTREAM_NONE;
   if(m_pFile->SkipNext())
   {
     m_eof = false;
-    return true;
+    return NEXTSTREAM_OPEN;
   }
-  return false;
+  return NEXTSTREAM_NONE;
 }
 
 bool CDVDInputStreamTV::CanRecord()

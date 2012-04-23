@@ -66,6 +66,8 @@ namespace PVR
 
   class CPVRTimerInfoTag
   {
+    friend class EPG::CEpgInfoTag;
+
   public:
     CStdString            m_strTitle;           /*!< @brief name of this timer */
     CStdString            m_strDirectory;       /*!< @brief directory where the recording must be stored */
@@ -84,7 +86,7 @@ namespace PVR
     const CPVRChannel *   m_channel;
     unsigned int          m_iMarginStart;       /*!< @brief (optional) if set, the backend starts the recording iMarginStart minutes before startTime. */
     unsigned int          m_iMarginEnd;         /*!< @brief (optional) if set, the backend ends the recording iMarginEnd minutes after endTime. */
-    CStdString            m_strGenre;           /*!< @brief genre of the timer */
+    std::vector<std::string> m_genre;           /*!< @brief genre of the timer */
     int                   m_iGenreType;         /*!< @brief genre type of the timer */
     int                   m_iGenreSubType;      /*!< @brief genre subtype of the timer */
 
@@ -144,6 +146,8 @@ namespace PVR
     unsigned int MarginEnd(void) const { return m_iMarginEnd; }
     void SetMarginEnd(unsigned int iMinutes) { m_iMarginEnd = iMinutes; }
 
+    bool SupportsFolders() const;
+
     /*!
      * @brief Show a notification for this timer in the UI
      */
@@ -162,10 +166,16 @@ namespace PVR
     bool UpdateOnClient();
 
   protected:
-    EPG::CEpgInfoTag *    m_epgInfo;
+    /*!
+     * @brief Called by the CEpgInfoTag destructor
+     */
+    virtual void OnEpgTagDeleted(void);
+
     CCriticalSection      m_critSection;
-    CDateTime             m_StartTime; /* start time */
-    CDateTime             m_StopTime;  /* stop time */
-    CDateTime             m_FirstDay;  /* if it is a repeating timer the first date it starts */
+    int                   m_iEpgId;    /*!< the id of the epg table or -1 if none */
+    CDateTime             m_epgStart;  /*!< the start time of the epg tag */
+    CDateTime             m_StartTime; /*!< start time */
+    CDateTime             m_StopTime;  /*!< stop time */
+    CDateTime             m_FirstDay;  /*!< if it is a repeating timer the first date it starts */
   };
 }

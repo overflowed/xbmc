@@ -22,7 +22,7 @@
 
 #include "AddonsDirectory.h"
 #include "addons/AddonDatabase.h"
-#include "FactoryDirectory.h"
+#include "DirectoryFactory.h"
 #include "Directory.h"
 #include "DirectoryCache.h"
 #include "FileItem.h"
@@ -41,8 +41,6 @@ namespace XFILE
 
 CAddonsDirectory::CAddonsDirectory(void)
 {
-  m_allowPrompting = true;
-  m_cacheDirectory = DIR_CACHE_ONCE;
 }
 
 CAddonsDirectory::~CAddonsDirectory(void)
@@ -69,7 +67,7 @@ bool CAddonsDirectory::GetDirectory(const CStdString& strPath, CFileItemList &it
   else if (path.GetHostName().Equals("disabled"))
   { // grab all disabled addons, including disabled repositories
     reposAsFolders = false;
-    CAddonMgr::Get().GetAllAddons(addons, false, true);
+    CAddonMgr::Get().GetAllAddons(addons, false, true, false);
     items.SetProperty("reponame",g_localizeStrings.Get(24039));
     items.SetLabel(g_localizeStrings.Get(24039));
   }
@@ -203,7 +201,7 @@ bool CAddonsDirectory::GetDirectory(const CStdString& strPath, CFileItemList &it
 
 void CAddonsDirectory::GenerateListing(CURL &path, VECADDONS& addons, CFileItemList &items, bool reposAsFolders)
 {
-  CStdString xbmcPath = _P("special://xbmc/addons");
+  CStdString xbmcPath = CSpecialProtocol::TranslatePath("special://xbmc/addons");
   items.ClearItems();
   for (unsigned i=0; i < addons.size(); i++)
   {

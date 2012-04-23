@@ -29,6 +29,8 @@
 #include "Epg.h"
 #include "EpgDatabase.h"
 
+#include <map>
+
 class CFileItemList;
 class CGUIDialogExtendedProgressBar;
 
@@ -169,8 +171,9 @@ namespace EPG
 
     /*!
      * @brief Show the progress bar
+     * @param bUpdating True if updating epg entries, false if just loading them from db
      */
-    virtual void ShowProgressDialog(void);
+    virtual void ShowProgressDialog(bool bUpdating = true);
 
     /*!
      * @brief Update the progress bar.
@@ -198,17 +201,25 @@ namespace EPG
     void PreventUpdates(bool bSetTo = true) { m_bPreventUpdates = bSetTo;  }
 
     /*!
+     * @brief Notify EPG container that there are pending manual EPG updates
+     * @param bHasPendingUpdates The new value
+     */
+    void SetHasPendingUpdates(bool bHasPendingUpdates = true);
+
+    /*!
      * @return True while being initialised.
      */
     bool IsInitialising(void) const;
 
-  protected:
     /*!
-     * @brief Insert an epg into the table. If the table already contains an entry with the same id, then that entry will be replaced.
-     * @param epg The EPG to insert.
+     * @brief Call Persist() on each table
+     * @return True when they all were persisted, false otherwise.
      */
-    virtual void InsertEpg(CEpg *epg);
+    bool PersistAll(void);
 
+    bool PersistTables(void);
+
+  protected:
     /*!
      * @brief Load the EPG settings.
      * @return True if the settings were loaded successfully, false otherwise.
@@ -223,10 +234,10 @@ namespace EPG
 
     /*!
      * @brief Load and update the EPG data.
-     * @param bShowProgress Show a progress bar if true.
+     * @param bOnlyPending Only check and update EPG tables with pending manual updates
      * @return True if the update has not been interrupted, false otherwise.
      */
-    virtual bool UpdateEPG(bool bShowProgress = false);
+    virtual bool UpdateEPG(bool bOnlyPending = false);
 
     /*!
      * @return True if a running update should be interrupted, false otherwise.
@@ -266,14 +277,16 @@ namespace EPG
 
     /** @name Class state properties */
     //@{
-    bool         m_bIsUpdating;        /*!< true while an update is running */
-    bool         m_bIsInitialising;    /*!< true while the epg manager hasn't loaded all tables */
-    bool         m_bPreventUpdates;    /*!< true to prevent EPG updates */
-    time_t       m_iLastEpgCleanup;    /*!< the time the EPG was cleaned up */
-    time_t       m_iNextEpgUpdate;     /*!< the time the EPG will be updated */
+    bool         m_bIsUpdating;            /*!< true while an update is running */
+    bool         m_bIsInitialising;        /*!< true while the epg manager hasn't loaded all tables */
+    bool         m_bLoaded;                /*!< true after epg data is initially loaded from the database */
+    bool         m_bPreventUpdates;        /*!< true to prevent EPG updates */
+    bool         m_bHasPendingUpdates;     /*!< true if there are manual updates pending */
+    time_t       m_iLastEpgCleanup;        /*!< the time the EPG was cleaned up */
+    time_t       m_iNextEpgUpdate;         /*!< the time the EPG will be updated */
     time_t       m_iNextEpgActiveTagCheck; /*!< the time the EPG will be checked for active tag updates */
-    unsigned int m_iNextEpgId;         /*!< the next epg ID that will be given to a new table when the db isn't being used */
-    std::vector<CEpg*> m_epgs;         /*!< the EPGs in this container */
+    unsigned int m_iNextEpgId;             /*!< the next epg ID that will be given to a new table when the db isn't being used */
+    std::map<unsigned int, CEpg*> m_epgs;  /*!< the EPGs in this container */
     //@}
 
     CGUIDialogExtendedProgressBar *m_progressDialog; /*!< the progress dialog that is visible when updating the first time */
