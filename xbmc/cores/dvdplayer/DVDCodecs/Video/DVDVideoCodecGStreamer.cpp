@@ -31,6 +31,9 @@
 #include <gst/app/gstappsink.h>
 #include <EGL/egl.h>
 
+typedef EGLImageKHR (EGLAPIENTRYP PFNEGLCREATEIMAGEKHRPROC) (EGLDisplay dpy, EGLContext ctx, EGLenum target, EGLClientBuffer buffer, const EGLint *attrib_list);
+typedef EGLBoolean (EGLAPIENTRYP PFNEGLDESTROYIMAGEKHRPROC) (EGLDisplay dpy, EGLImageKHR image);
+
 bool CDVDVideoCodecGStreamer::gstinitialized = false;
 
 static PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
@@ -365,7 +368,7 @@ bool CDVDVideoCodecGStreamer::GetPicture(DVDVideoPicture* pDvdVideoPicture)
   }
 
   pDvdVideoPicture->eglImageHandle = new GSTEGLImageHandle(buf, m_width, m_height, m_format);
-  pDvdVideoPicture->format  = DVDVideoPicture::FMT_EGLIMG;
+  pDvdVideoPicture->format  = RENDER_FMT_EGLIMG;
   pDvdVideoPicture->pts     = (double)GST_BUFFER_TIMESTAMP(buf) / 1000.0;
   pDvdVideoPicture->dts     = DVD_NOPTS_VALUE;
   pDvdVideoPicture->iDuration = (double)GST_BUFFER_DURATION(buf) / 1000.0;
