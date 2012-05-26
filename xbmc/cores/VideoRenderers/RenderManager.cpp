@@ -844,7 +844,7 @@ int CXBMCRenderManager::AddVideoPicture(DVDVideoPicture& pic)
   else if(pic.format == RENDER_FMT_CVBREF)
     m_pRenderer->AddProcessor(pic.cvBufferRef);
 #endif
-  else if(pic.format == DVDVideoPicture::FMT_EGLIMG)
+  else if(pic.format == RENDER_FMT_EGLIMG)
     m_pRenderer->AddProcessor(&pic);
 #ifdef HAVE_LIBVA
   else if(pic.format == RENDER_FMT_VAAPI)
