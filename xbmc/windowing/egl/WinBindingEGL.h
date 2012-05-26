@@ -23,7 +23,7 @@
 #define WINDOW_BINDING_EGL_H
 
 #include "utils/StringUtils.h"
-
+#include <GL/gl.h>
 #include <EGL/egl.h>
 #ifndef TARGET_WINDOWS
 #include <EGL/eglext.h>
