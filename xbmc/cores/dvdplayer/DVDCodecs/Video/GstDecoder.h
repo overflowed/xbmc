@@ -27,11 +27,11 @@
 static inline int debug_enabled(void)
 {
   static int enabled = -1;
-  if (enabled == -1)
+  /*if (enabled == -1)
   {
     char *str = getenv("XBMC_DEBUG");
     enabled = str && strstr(str, "decode");
-  }
+  }*/
   return enabled;
 }
 

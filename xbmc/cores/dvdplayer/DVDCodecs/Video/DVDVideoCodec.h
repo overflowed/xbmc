@@ -42,6 +42,8 @@ class COpenMax;
 class COpenMaxVideo;
 struct OpenMaxVideoBuffer;
 
+typedef void *EGLImageKHR;
+
 class EGLImageHandle
 {
 public:
@@ -87,6 +89,10 @@ struct DVDVideoPicture
       struct __CVBuffer *cvBufferRef;
     };
   };
+
+	struct {
+      EGLImageHandle *eglImageHandle;
+    };
 
   unsigned int iFlags;
 
