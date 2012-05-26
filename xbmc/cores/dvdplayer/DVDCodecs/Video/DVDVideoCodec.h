@@ -22,6 +22,7 @@
  */
 
 #include "system.h"
+#include "threads/SingleLock.h"
 
 #include <vector>
 #include "cores/VideoRenderers/RenderFormats.h"
@@ -35,10 +36,25 @@
 
 namespace DXVA { class CSurfaceContext; }
 namespace VAAPI { struct CHolder; }
+class CDVDVideoCodec;
 class CVDPAU;
 class COpenMax;
 class COpenMaxVideo;
 struct OpenMaxVideoBuffer;
+
+class EGLImageHandle
+{
+public:
+  EGLImageHandle()
+  {
+  }
+  virtual ~EGLImageHandle()
+  {
+  }
+  virtual EGLImageKHR Get() = 0;
+  virtual EGLImageHandle * Ref() = 0;
+  virtual void UnRef() = 0;
+};
 
 // should be entirely filled by all codecs
 struct DVDVideoPicture
@@ -170,6 +186,8 @@ public:
    */ 
   virtual bool ClearPicture(DVDVideoPicture* pDvdVideoPicture)
   {
+    if (pDvdVideoPicture->eglImageHandle)
+      pDvdVideoPicture->eglImageHandle->UnRef();
     memset(pDvdVideoPicture, 0, sizeof(DVDVideoPicture));
     return true;
   }

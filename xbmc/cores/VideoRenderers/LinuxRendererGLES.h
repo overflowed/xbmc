@@ -24,8 +24,11 @@
 
 #if HAS_GLES == 2
 
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include "system_gl.h"
-
 #include "xbmc/guilib/FrameBufferObject.h"
 #include "xbmc/guilib/Shader.h"
 #include "settings/VideoSettings.h"
@@ -63,6 +66,13 @@ struct DRAWRECT
   float top;
   float right;
   float bottom;
+};
+
+enum EFIELDSYNC
+{
+  FS_NONE,
+  FS_TOP,
+  FS_BOT
 };
 
 struct YUVRANGE
@@ -157,6 +167,9 @@ public:
 #ifdef HAVE_VIDEOTOOLBOXDECODER
   virtual void         AddProcessor(struct __CVBuffer *cvBufferRef);
 #endif
+  /* for eglImage case: */
+  void AddProcessor(DVDVideoPicture *picture);
+
 protected:
   virtual void Render(DWORD flags, int index);
 
@@ -175,6 +188,10 @@ protected:
   void UploadYV12Texture(int index);
   void DeleteYV12Texture(int index);
   bool CreateYV12Texture(int index);
+
+  void UploadEGLIMAGETexture(int index);
+  void DeleteEGLIMAGETexture(int index);
+  bool CreateEGLIMAGETexture(int index);
 
   void UploadCVRefTexture(int index);
   void DeleteCVRefTexture(int index);
@@ -241,6 +258,9 @@ protected:
     YV12Image image;
     unsigned  flipindex; /* used to decide if this has been uploaded */
 
+    double pts; // for debugging A/V sync in rendering
+    EGLImageHandle *eglImageHandle;
+
 #ifdef HAVE_LIBOPENMAX
     OpenMaxVideoBuffer *openMaxBuffer;
 #endif
@@ -259,6 +279,8 @@ protected:
   void LoadPlane( YUVPLANE& plane, int type, unsigned flipindex
                 , unsigned width,  unsigned height
                 , int stride, void* data );
+
+  PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
 
   Shaders::BaseYUV2RGBShader     *m_pYUVShader;
   Shaders::BaseVideoFilterShader *m_pVideoFilterShader;
