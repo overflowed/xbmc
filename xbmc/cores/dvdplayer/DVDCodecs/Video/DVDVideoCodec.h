@@ -111,6 +111,7 @@ struct DVDVideoPicture
   int qscale_stride;
   int qscale_type;
 
+  unsigned int iDisplayX, iDisplayY;
   unsigned int iWidth;
   unsigned int iHeight;
   unsigned int iDisplayWidth;  // width of the picture without black bars

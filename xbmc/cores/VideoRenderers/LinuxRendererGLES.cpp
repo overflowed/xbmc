@@ -858,6 +858,7 @@ void CLinuxRendererGLES::Render(DWORD flags, int index)
 
 void CLinuxRendererGLES::RenderSinglePass(int index, int field)
 {
+  YUVBUFFER &buf    = m_buffers[index];
   YV12Image &im     = m_buffers[index].image;
   YUVFIELDS &fields = m_buffers[index].fields;
   YUVPLANES &planes = fields[field];
@@ -1939,6 +1940,7 @@ void CLinuxRendererGLES::SetTextureFilter(GLenum method)
 {
   for (int i = 0 ; i<m_NumYV12Buffers ; i++)
   {
+    YUVBUFFER &buf = m_buffers[i];
     YUVFIELDS &fields = m_buffers[i].fields;
 
     for (int f = FIELD_FULL; f<=FIELD_BOT ; f++)

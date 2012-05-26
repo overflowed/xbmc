@@ -172,6 +172,7 @@ protected:
   virtual void LoadShaders(int field=FIELD_FULL);
   void SetTextureFilter(GLenum method);
   void UpdateVideoFilter();
+  void UnRefBuf(int index);
 
   // textures
   void (CLinuxRendererGLES::*m_textureUpload)(int index);
